@@ -23,7 +23,10 @@ RESOURCE_OUTPUT_DIR="$PWD/resource_metrics_$(date +%Y%m%d_%H%M%S)" \
   --resource-output-dir "$RESOURCE_OUTPUT_DIR" \
   -- \
   --training.steps 10 \
-  --training.seq_len 16384
+  --training.seq_len 16384 2>&1 |&tee run.log
+
+and Read /lus/flare/projects/datascience/seonghapark/xpu_launcher/run.log and create
+a plain-text report about errors, warnings, successes, and solutions for the errors.
 
 ================================================================================
 EXECUTION SUMMARY
