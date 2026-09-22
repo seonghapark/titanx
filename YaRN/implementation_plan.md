@@ -61,6 +61,26 @@ following the `gpt_oss` pattern exactly:
     rope_theta=50000, vocab_size=256128, hidden_dim=11008,
     scaling="yarn",
     max_seq_len=262144,          # 2x extension target
+
+
+'''
+max_seq_len=262144 is the RoPE cache ceiling (pre-computed rotation matrices), not the actual training sequence length. The "2x extension target" comment is wrong/incomplete.
+
+The actual extension happens at the training level:
+- Original training: 8K (original_seq_len)
+- Current run: 16K (what you just ran, apt_2b flavor)
+- Next target: 32K (with agpt_2b_yarn, which would be 4x the original)
+- Max possible: up to 262K (limited only by max_seq_len)
+
+The 262144 is a generous upper bound borrowed from the gpt_oss pattern in the codebase -- it lets you extend arbitrarily later without recompiling the config. You control the actual training length separately with --training.seq_len.
+
+So the comment should have been something like:
+max_seq_len=262144,  # Upper bound for RoPE cache; actual training seq_len set via --training.seq_len
+
+The "2x extension target" is where you'll train next (32K), but max_seq_len is an upper ceiling that gives you headroom. Does that clarify the logic?
+'''
+
+
     original_seq_len=8192,       # the length it was actually trained at
     rope_factor=32.0,            # matches gpt_oss's factor for a similar ratio; tune per target length
     beta_fast=32.0, beta_slow=1.0,  # YaRN paper / jquesnelle defaults (beta_fast=32, beta_slow=1)
