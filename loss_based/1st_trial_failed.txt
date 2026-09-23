@@ -1,0 +1,85 @@
+ERRORS:
+1. Critical: "Missing key in checkpoint state_dict" (Repeated 48 times)
+- Type: RuntimeError
+- Frequency: All 48 training ranks failed identically
+- Error Pattern:
+RuntimeError: Missing key in checkpoint state_dict: data loader.dp_rank_0.
+RuntimeError: Missing key in checkpoint state_dict: data loader.dp_rank_1.
+RuntimeError: Missing key in checkpoint state_dict: data loader.dp_rank_2.
+... (continues for all 48 ranks)
+- Root Cause: The checkpoint being loaded (step-92859) was created with a different data parallelism
+  configuration than the current run. The checkpoint contains dataloader state for its original topology,
+  but the new run has 48 ranks with different dp_rank assignments. When TorchTitan tries to restore the
+  checkpoint, it can't find matching dataloader state keys.
+
+Why This Happens:
+- Original checkpoint: Created with different NNODES/NPROC_PER_NODE configuration
+- Current run: 12 nodes x 4 processes/node = 48 ranks
+- Mismatch in distributed training state structure
+
+WARNINGS:
+2. Non-critical: "model.safetensors.index.json not found" (Repeated 40+ times)
+- Lines: 9556, 9557, 9564, ... (throughout log)
+- Frequency: ~40+ instances across ranks
+- Message:
+WARNING - model.safetensors.index.json not found at hf_assets_path
+Defaulting to saving a single safetensors file if checkpoint is saved in HF format
+- Root Cause: The HuggingFace model metadata index file doesn't exist at the specified path
+- Impact: LOW - only affects HF format checkpoint saving, which isn't active in this training run
+- Resolution: This is benign; the model will save as a single file instead of shared files
+
+---
+
+Solutions
+
+Solution 1: Remove Checkpoint Initial Load (Recommended)
+Since the checkpoint was created with a different topology, don't load it initially, Start fresh:
+./run_train_torchtitan.sh multi -- --training.steps 400000 --training.seq_len 16384
+Remove the --checkpoint.initial_load_path argument to avoid the state_dict mismatch.
+Why: Fresh start is safest when topology changes. The model weights are already at step-92859 in the
+pre-trained model at HF_ASSETS_PATH.
+
+---
+
+Solution 2: Use Model-Only checkpoint Load (If you want to resume)
+Since we changed initial_load_model_only to False, if you want to use the checkpoint, you need to enable
+model-only loading:
+./run_train_torchtitan.sh multi -- \
+--training.steps 400000 \
+--training.seq_len 16384 \
+--checkpoint.initial_load_model_only
+
+This tells TorchTitan: "Load only the model weights from the checkpoint, ignore the dataloader, optimizer,
+training state." Since we changed the default to False, we now need to explicitly enable it.
+
+Why: Different topologies have incompatible dataloader state, but model weights are topology-agnostic.
+
+---
+
+Solution 3: Check Checkpoint Metadata (For Future)
+Before running, verify the checkpoint was created with your current topology:
+ls -la /lus/flare/projects/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/outputs/checkpoints/
+agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144/step-92859/
+Look for metadata files or README documenting the original training configuration.
+
+---
+
+Recommended Action
+
+Use Solution 1 (Fresh start):
+LOSS_STD_TERMINATION_ENABLED=1 \
+LOSS_STD_THRESHOLD=0.001 \
+LOSS_STD_WINDOW=50 \
+MODEL_PATH=/lus/flare/projects/datascience/seonghapark/agpt-2b-v2-256n-step-92859-safetensors \
+MODULE=agpt \
+CONFIG=agpt_2b \
+./run_train_torchtitan.sh multi -- \
+--training.steps 400000 \
+--training.seq_len 16384
+
+This will:
+- Fix the missing checkpoint key error
+- Use the pre-trained weights from the model directory
+- Start training from scratch with convergence-based early termination enabled
+- Run all 48 ranks successfully
+
