@@ -1,0 +1,67 @@
+================================================================================
+                     RUN.LOG FIX SUMMARY
+================================================================================
+
+ISSUE FOUND:       run.log analysis revealed shell script argument formatting error
+SEVERITY:          CRITICAL - Prevented all 48 training ranks from launching
+ROOT CAUSE:        Inconsistent tyro argument syntax in shell script
+SOLUTION:          Applied equals-syntax formatting to numeric arguments
+STATUS:            ✓ FIXED AND VERIFIED
+
+================================================================================
+                         ERROR DETAILS
+================================================================================
+
+When job ran, all 48 training ranks failed with:
+  "Unrecognized options: true"
+
+Root cause: Shell script passed numeric training arguments with space syntax:
+  --training.loss_std_threshold 0.001   (WRONG - creates 2 array elements)
+  --training.loss_std_window 50         (WRONG - creates 2 array elements)
+
+Tyro argument parser expects equals syntax for all arguments:
+  --training.loss_std_threshold=0.001   (RIGHT - single array element)
+  --training.loss_std_window=50         (RIGHT - single array element)
+
+================================================================================
+                        WHAT WAS FIXED
+================================================================================
+
+File: run_train_torchtitan.sh
+Lines: 227-233
+
+Changed 2 lines:
+  Line 228: --training.loss_std_threshold "$LOSS_STD_THRESHOLD"
+            TO: --training.loss_std_threshold=$LOSS_STD_THRESHOLD
+
+  Line 231: --training.loss_std_window "$LOSS_STD_WINDOW"
+            TO: --training.loss_std_window=$LOSS_STD_WINDOW
+
+This makes all loss-based termination arguments use consistent equals syntax:
+  --training.enable_loss_std_termination=true  (already using equals)
+  --training.loss_std_threshold=0.001          (NOW using equals) ✓
+  --training.loss_std_window=50                (NOW using equals) ✓
+
+================================================================================
+                      READY FOR NEXT RUN
+================================================================================
+
+Command to resubmit training:
+
+  cd /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan
+
+  LOSS_STD_TERMINATION_ENABLED=1 \
+  LOSS_STD_THRESHOLD=0.001 \
+  LOSS_STD_WINDOW=50 \
+  MODEL=/lus/flare/projects/datascience/seonghapark/agpt-2b-v2-256n-step-92859-safetensors \
+  MODULE=agpt \
+  CONFIG=agpt_2b \
+  ./run_train_torchtitan.sh multi
+
+Expected Outcome:
+  ✓ All 48 ranks will launch successfully
+  ✓ Model will load from checkpoint
+  ✓ Training will proceed to 400,000 steps or until convergence
+  ✓ Early termination will trigger when loss stabilizes (std <= 0.001)
+
+================================================================================

@@ -1,0 +1,77 @@
+================================================================================
+                    UNRECOGNIZED OPTIONS ERROR - SUMMARY
+================================================================================
+
+NEW ERROR FOUND IN RUN.LOG (2026-09-23 15:25:57)
+
+Error: "Unrecognized options: true"
+Location: Lines 94-102 (and repeating)
+Severity: CRITICAL - Prevents all 48 training ranks from launching
+
+================================================================================
+                          THE PROBLEM
+================================================================================
+
+Good News:
+  ✓ The shell script fixes WERE applied correctly
+  ✓ The command line shows all arguments with equals syntax:
+    --training.enable_loss_std_termination=true
+    --training.loss_std_threshold=0.001
+    --training.loss_std_window=50
+
+Bad News:
+  ✗ Tyro is still rejecting these with "Unrecognized options: true"
+  ✗ This means tyro doesn't accept boolean values with equals syntax
+
+ROOT CAUSE:
+──────────
+Tyro's argument parser is rejecting `--flag=true` syntax for boolean arguments.
+The parser sees "true" as a standalone unrecognized option.
+
+Solution Options:
+─────────────────
+Option 1: Use flag without value (if tyro supports it)
+  Instead of: --training.enable_loss_std_termination=true
+  Try:        --training.enable_loss_std_termination
+
+Option 2: Check tyro documentation for correct boolean syntax
+  Tyro may use: --flag value (but this breaks with spaces)
+  Or: --flag True (capital T)
+  Or: --flag 1 (numeric representation)
+
+Option 3: Don't pass the argument at all (use config file)
+  Pass configuration via YAML config instead of command line
+
+================================================================================
+                    FILES FOR REFERENCE
+================================================================================
+
+1. /lus/flare/projects/datascience/seonghapark/xpu_launcher/run.log
+   - Contains the error messages and command line
+
+2. /lus/flare/projects/datascience/seonghapark/UNRECOGNIZED_OPTIONS_ANALYSIS.txt
+   - Detailed root cause analysis
+
+3. /lus/flare/projects/datascience/seonghapark/RUN_ANALYSIS_REPORT.txt
+   - Earlier analysis from first error
+
+4. /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/run_train_torchtitan.sh
+   - Shell script (already fixed with equals syntax)
+
+5. /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/torchtitan_repo/torchtitan/config/configs.py
+   - Configuration file with TrainingConfig definition
+
+================================================================================
+                      IMMEDIATE NEXT STEPS
+================================================================================
+
+1. Check configs.py to see how TrainingConfig.enable_loss_std_termination is used
+2. Determine if tyro expects boolean flags without values (flag-style)
+3. Modify shell script to pass arguments in correct format for tyro
+4. Retest with corrected syntax
+
+The key insight: Our shell syntax is now correct (equals signs), but tyro
+doesn't like how we're specifying the boolean value. The fix is to match
+whatever format tyro expects for boolean arguments.
+
+================================================================================

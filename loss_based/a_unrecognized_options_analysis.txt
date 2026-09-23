@@ -1,0 +1,149 @@
+================================================================================
+                 UNRECOGNIZED OPTIONS ERROR - DETAILED ANALYSIS
+================================================================================
+
+ERROR FOUND IN NEW RUN.LOG
+Date: 2026-09-23 15:25:51 - 15:25:57
+
+EXACT ERROR MESSAGE (Line 95):
+─────────────────────────────
+  Unrecognized options: true
+
+CONTEXT:
+─────────
+Error appears at line 94-102:
+  ╭─ Unrecognized options ───────────────────────────────────────────────────────╮
+  │ Unrecognized options: true                                                   │
+  │ ──────────────────────────────────────────────────────────────────────────── │
+  │ Available subcommands: activation-checkpoint:selective,                      │
+  │ activation-checkpoint:full, activation-checkpoint:memory-budget,             │
+  │ activation-checkpoint:none                                                   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+
+================================================================================
+                          ROOT CAUSE ANALYSIS
+================================================================================
+
+Looking at line 19 of the run.log (the command line):
+
+  --training.enable_loss_std_termination=true ✓ CORRECT (equals syntax)
+  --training.loss_std_threshold=0.001        ✓ CORRECT (equals syntax)
+  --training.loss_std_window=50              ✓ CORRECT (equals syntax)
+
+ALL arguments now use equals syntax! The shell script fixes were applied correctly.
+
+However, the error "Unrecognized options: true" suggests:
+
+THEORY 1: Tyro is still parsing argument incorrectly
+─────────────────────────────────────────────────────
+The word "true" is being recognized as a standalone option instead of a value.
+This should NOT happen with equals syntax: --key=true creates a single element.
+
+THEORY 2: There's a different argument causing the issue
+───────────────────────────────────────────────────────
+The error message might be related to a different argument entirely, not the
+loss termination feature we added.
+
+THEORY 3: The shell script still has issues
+────────────────────────────────────────────
+Even though we fixed lines 225 and 228, there might be other problematic
+arguments elsewhere in the command.
+
+================================================================================
+                        CRITICAL OBSERVATION
+================================================================================
+
+Looking at line 19 of run.log more carefully:
+
+The command shows:
+  --training.enable_loss_std_termination=true
+  --training.loss_std_threshold=0.001
+  --training.loss_std_window=50
+
+These all look correct!
+
+But wait - the error says "Unrecognized options: true"
+
+This might mean:
+1. Some OTHER part of the command is passing a bare "true" without an equals sign
+2. Or tyro is still interpreting "=true" as separate elements somehow
+
+NEED TO CHECK:
+──────────────
+What if the boolean conversion in the shell script on line 221 still has an issue?
+
+  Line 219: TRAIN_CMD+=("--training.enable_loss_std_termination=true")
+  Line 221: TRAIN_CMD+=("--training.enable_loss_std_termination=false")
+
+These look correct. But are they actually being executed?
+
+================================================================================
+                           NEXT INVESTIGATION
+================================================================================
+
+The shell script fix was applied, but the error persists. This suggests:
+
+POSSIBILITY A:
+  The shell variable LOSS_STD_TERMINATION_ENABLED is NOT set to "1"
+  Therefore the if-statement evaluates to checking extra args
+  And the boolean conversion logic is bypassed
+  
+POSSIBILITY B:
+  The has_extra_arg function is finding the argument in the extra args
+  So the if-block is skipped entirely
+  And we're falling back to default behavior
+
+POSSIBILITY C:
+  There's a different source of the "true" argument we haven't found yet
+
+ACTION REQUIRED:
+────────────────
+1. Check if LOSS_STD_TERMINATION_ENABLED was set when job was submitted
+2. Check if has_extra_arg is correctly detecting arguments  
+3. Check the shell script one more time for any other "true/false" conversions
+4. Look for other arguments that might be causing the issue
+
+The error "Unrecognized options: true" is very specific - it's literally seeing
+the word "true" as an unrecognized option, which suggests it's being passed as
+a standalone argument rather than as part of a key=value pair.
+
+This could happen if:
+  ✗ Arguments are still space-separated (but our log shows equals syntax!)
+  ✗ An earlier argument is missing its value (consumes the "true" as positional)
+  ✗ Something is pre-processing the arguments incorrectly
+
+================================================================================
+                              KEY FINDING
+================================================================================
+
+LOOK AT THIS CAREFULLY:
+
+Line 19 shows the FINAL command that will be executed. It contains:
+  --training.enable_loss_std_termination=true
+  --training.loss_std_threshold=0.001
+  --training.loss_std_window=50
+
+These are ALL using equals syntax correctly!
+
+BUT the error "Unrecognized options: true" still occurs.
+
+This means:
+  1. Our shell script fix IS working (the syntax is now correct)
+  2. BUT tyro is STILL rejecting it somehow
+  3. The issue might be deeper in how tyro parses boolean=value arguments
+
+POSSIBLE FINAL ISSUE:
+─────────────────────
+Tyro might require boolean values to be specified differently!
+
+Instead of:
+  --training.enable_loss_std_termination=true
+
+Tyro might want:
+  --training.enable_loss_std_termination   (flag, no value)
+  OR
+  --training.enable_loss_std_termination true   (with space - no!)
+
+Let's check the TrainingConfig dataclass to see how the boolean should be specified.
+
+================================================================================
