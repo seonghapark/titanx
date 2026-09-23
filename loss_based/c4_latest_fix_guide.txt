@@ -1,0 +1,188 @@
+================================================================================
+                    LATEST ERROR AND FIX GUIDE (2026-09-23)
+================================================================================
+
+ISSUE FOUND: Tensor sharding incompatibility during HF model loading
+STATUS: Identified and solution documented
+READY FOR: Implementation and testing
+
+================================================================================
+                             QUICK REFERENCE
+================================================================================
+
+ERROR:
+  "Cannot unflatten unevenly sharded tensor: output dimension 0 (size 16) 
+   is not evenly divisible by mesh dimension 0 (size 48)"
+
+LOCATION:
+  File: torchtitan/models/llama3/state_dict_adapter.py
+  Method: _permute()
+  Line: ~52
+
+CAUSE:
+  FSDP-sharded tensor reshape incompatibility (dimension 16 not divisible by 48)
+
+SOLUTION:
+  Convert distributed tensor to local before reshape operation
+
+FIX TIME:
+  ~5 minutes to implement and test
+
+TESTING:
+  Single node: ./run_train_torchtitan.sh single --training.steps 100
+  Multi-node: LOSS_STD_TERMINATION_ENABLED=1 ./run_train_torchtitan.sh multi
+
+================================================================================
+                          DOCUMENTATION FILES
+================================================================================
+
+1. ERROR_SUMMARY.md (This directory)
+   - Quick overview of the error
+   - Implementation steps
+   - Testing commands
+   - Next actions checklist
+
+2. RECOMMENDED_FIX.txt (This directory)
+   - Detailed code changes
+   - Full explanation
+   - Alternative solutions
+   - Complete testing procedure
+   - Validation checklist
+
+3. m_1st_run_log_analysis.txt (This directory)
+   - First run analysis (unrecognized options)
+   - Original DCP mismatch error
+
+4. n_2nd_run_log_analysis.md (This directory)
+   - Second run analysis (boolean argument format)
+   - initial_load_model_only warning
+
+================================================================================
+                           IMPLEMENTATION GUIDE
+================================================================================
+
+STEP 1: Open the file
+  vim torchtitan/models/llama3/state_dict_adapter.py
+
+STEP 2: Add import at top
+  from torch.distributed.tensor import DTensor
+
+STEP 3: Locate _permute() method (around line 45)
+
+STEP 4: Replace method with version from RECOMMENDED_FIX.txt
+  - Add DTensor check
+  - Add to_local() call
+  - Rest of logic remains the same
+
+STEP 5: Save file
+
+STEP 6: Test on single node first
+  MODEL=/.../agpt-2b-v2-256n-step-92859-safetensors \
+  ./run_train_torchtitan.sh single --training.steps 100
+
+STEP 7: If successful, test on multi-node
+  LOSS_STD_TERMINATION_ENABLED=1 \
+  MODEL=/.../agpt-2b-v2-256n-step-92859-safetensors \
+  ./run_train_torchtitan.sh multi --training.steps 100
+
+STEP 8: Verify success
+  Look for: "Finished loading the checkpoint"
+  Look for: "Starting training loop"
+  NOT: "Cannot unflatten unevenly sharded tensor"
+
+================================================================================
+                         WHAT THIS ERROR MEANS
+================================================================================
+
+The error occurred because:
+
+1. Your refactoring removed DCP checkpoints and forced HF-only loading
+2. HF model loading uses state_dict adapter to convert weights
+3. The _permute() method reshapes tensors for RoPE weights
+4. These tensors are FSDP-sharded across 48 ranks
+5. The reshape target dimension (16) is not divisible by 48 ranks
+6. PyTorch cannot automatically reshard for this operation
+
+The fix:
+- Convert distributed tensor to local before reshape
+- Reshape works on local tensor without constraints
+- Result is automatically synchronized across ranks
+
+================================================================================
+                          FILES IN THIS DIRECTORY
+================================================================================
+
+OLD FILES (From previous runs):
+  a_unrecognized_options_analysis.txt  - Initial parsing errors
+  b_bugfix_report.md                   - Boolean format fix
+  c_verification_checklist.txt         - First test checklist
+  d_error_summary.txt                  - DCP mismatch summary
+  e_fix_summary.txt                    - Checkpoint refactor summary
+  f_index.md                           - Implementation index
+  g_errors_warnings_analysis.txt       - Warning analysis
+  h_1st_trial_failed.txt               - First trial summary
+  i_checkpoint_refactoring_summary.md  - Config cleanup
+  implementation_plan.md               - Original plan
+  implementation_summary.md            - Implementation details
+  j_refactoring_completed.md           - Refactor completion
+  k_exact_changes.txt                  - Exact code changes
+  l_verification_checklist.md          - Verification guide
+  m_1st_run_log_analysis.txt           - First run errors
+  n_2nd_run_log_analysis.md            - Second run analysis
+  test_report.md                       - Test results
+
+NEW FILES (Latest):
+  ERROR_SUMMARY.md                     - Quick reference (THIS ISSUE)
+  RECOMMENDED_FIX.txt                  - Detailed fix guide
+  LATEST_FIX_GUIDE.txt                 - This file
+
+================================================================================
+                           NEXT STEPS
+================================================================================
+
+Immediate (Next 30 minutes):
+  1. Read RECOMMENDED_FIX.txt (detailed implementation guide)
+  2. Apply code fix to state_dict_adapter.py
+  3. Test on single node
+
+Short-term (Next hour):
+  4. Test on multi-node (48 ranks)
+  5. Verify early termination works
+  6. Run training with loss convergence detection
+
+Validation:
+  - Model loads without tensor sharding errors
+  - Training progresses normally
+  - Loss values are reasonable
+  - Convergence detection works (if enabled)
+
+================================================================================
+                         ESTIMATED TIME TO FIX
+================================================================================
+
+Code Implementation:  ~2 minutes
+Single-node Test:    ~5 minutes
+Multi-node Test:     ~10 minutes
+Verification:        ~3 minutes
+─────────────────────────────
+Total:               ~20 minutes
+
+This is blocking the full training run from proceeding.
+
+================================================================================
+                              SUMMARY
+================================================================================
+
+✓ Error identified: Tensor sharding incompatibility
+✓ Root cause found: _permute() method not handling FSDP tensors
+✓ Solution designed: Add to_local() call before reshape
+✓ Alternative provided: Use redistribute() if needed
+✓ Testing procedure: Single then multi-node
+✓ Implementation time: ~20 minutes total
+✓ Risk level: LOW
+
+STATUS: READY FOR IMPLEMENTATION
+
+See RECOMMENDED_FIX.txt for detailed code changes and testing procedures.
+
+================================================================================

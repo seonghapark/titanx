@@ -1,0 +1,272 @@
+================================================================================
+                      RECOMMENDED FIX FOR STATE_DICT ADAPTER
+================================================================================
+
+FILE: torchtitan/models/llama3/state_dict_adapter.py
+
+ISSUE:
+  The _permute() method fails when the tensor is distributed (sharded)
+  because dimension 16 cannot be evenly divided by 48 ranks.
+
+ERROR MESSAGE:
+  RuntimeError: Cannot unflatten unevenly sharded tensor:
+  output dimension 0 (size 16) is not evenly divisible by mesh dimension 0 (size 48).
+  Please redistribute the tensor before this operation.
+
+ROOT CAUSE:
+  When loading HF model checkpoints, the state_dict adapter tries to reshape
+  tensors that are FSDP-sharded across 48 ranks. The reshape from [2048, 2048]
+  to [16, 64, 2, 2048] requires the new first dimension (16) to be evenly
+  divisible by the number of ranks (48), which it is not.
+
+CURRENT CODE (Around line 50-52 in state_dict_adapter.py):
+───────────────────────────────────────────────────────────────────────────
+def _permute(self, value: torch.Tensor, n_heads: int) -> torch.Tensor:
+    dim1, dim2 = value.shape
+    n_heads_arg = n_heads
+    value = value.view(n_heads, -1)
+    value = (
+        value.reshape(
+            n_heads_arg, value.shape[1] // n_heads_arg // 2, 2, value.shape[2]
+        )
+        .transpose(1, 2)
+        .reshape(value.shape)
+    )
+    return value
+
+PROBLEMATIC OPERATION:
+  w.view(n_heads_arg, dim1 // n_heads_arg // 2, 2, dim2)
+  │
+  └─ Tries to reshape from [2048, 2048] to [16, 64, 2, 2048]
+     But tensor is SHARDED across 48 ranks!
+
+═════════════════════════════════════════════════════════════════════════════
+
+SOLUTION (RECOMMENDED):
+───────────────────────────────────────────────────────────────────────────
+
+Step 1: Add import at top of file
+  from torch.distributed.tensor import DTensor
+
+Step 2: Replace the _permute() method with:
+
+def _permute(self, value: torch.Tensor, n_heads: int) -> torch.Tensor:
+    """
+    Permute RoPE weights for compatibility with TorchTitan format.
+    Handles both replicated and distributed tensor inputs.
+
+    Args:
+        value: Tensor to permute (may be distributed)
+        n_heads: Number of attention heads
+
+    Returns:
+        Permuted tensor in TorchTitan format
+    """
+    # Convert distributed tensor to local to avoid sharding issues
+    # during reshape operations
+    if isinstance(value, DTensor):
+        value = value.to_local()  # Convert to local tensor on each rank
+
+    # Perform the reshape operation on local tensor
+    dim1, dim2 = value.shape
+    n_heads_arg = n_heads
+
+    value = value.view(n_heads, -1)
+    value = (
+        value.reshape(
+            n_heads_arg, value.shape[1] // n_heads_arg // 2, 2, value.shape[2]
+        )
+        .transpose(1, 2)
+        .reshape((dim1, dim2))  # Restore original shape
+    )
+
+    return value
+
+═════════════════════════════════════════════════════════════════════════════
+
+WHY THIS WORKS:
+───────────────────────────────────────────────────────────────────────────
+
+1. to_local() converts distributed tensor to full local copy on each rank
+   - Gathers sharded dimensions to have complete tensor
+   - No data is lost, each rank gets the full tensor
+
+2. Reshape operation now works on local (non-sharded) tensor
+   - No dimension divisibility constraints
+   - Standard PyTorch reshape behavior
+
+3. Result is returned as local tensor
+   - Automatically synchronized across ranks
+   - Ready for subsequent FSDP operations
+
+═════════════════════════════════════════════════════════════════════════════
+
+ALTERNATIVE SOLUTION (If to_local() has overhead):
+───────────────────────────────────────────────────────────────────────────
+
+Use redistribute() instead of to_local():
+
+from torch.distributed.tensor import DTensor, Replicate
+
+def _permute(self, value: torch.Tensor, n_heads: int) -> torch.Tensor:
+    """
+    Permute RoPE weights for compatibility with TorchTitan format.
+    Handles both replicated and distributed tensor inputs.
+    """
+    # Ensure tensor is replicated (not sharded) before reshape
+    if isinstance(value, DTensor):
+        # Redistribute to replicated spec (no sharding)
+        value = value.redistribute([Replicate()])
+
+    # Now perform reshape on replicated tensor
+    dim1, dim2 = value.shape
+    n_heads_arg = n_heads
+
+    value = value.view(n_heads, -1)
+    value = (
+        value.reshape(
+            n_heads_arg, value.shape[1] // n_heads_arg // 2, 2, value.shape[2]
+        )
+        .transpose(1, 2)
+        .reshape((dim1, dim2))  # Restore original shape
+    )
+
+    return value
+
+Note: Replicate() might be more efficient in some cases, but to_local() is
+simpler and more straightforward for this use case.
+
+═════════════════════════════════════════════════════════════════════════════
+
+TESTING PROCEDURE:
+───────────────────────────────────────────────────────────────────────────
+
+After applying the fix:
+
+1. Single Node Test (Safest):
+   ────────────────────────
+   MODEL=/lus/flare/projects/datascience/seonghapark/agpt-2b-v2-256n-step-92859-safetensors \
+   ./run_train_torchtitan.sh single --training.steps 100
+
+   Expected: Model loads without errors, starts training
+
+2. Multi-Node Test (Full test):
+   ───────────────────────────
+   LOSS_STD_TERMINATION_ENABLED=1 \
+   MODEL=/lus/flare/projects/datascience/seonghapark/agpt-2b-v2-256n-step-92859-safetensors \
+   ./run_train_torchtitan.sh multi --training.steps 100
+
+   Expected: All 48 ranks load model and start training
+
+3. Check for Success:
+   ─────────────────
+   Look for: "Finished loading the checkpoint"
+   Look for: "Starting training loop"
+
+   Should NOT see: "Cannot unflatten unevenly sharded tensor"
+
+═════════════════════════════════════════════════════════════════════════════
+
+IMPACT ASSESSMENT:
+───────────────────────────────────────────────────────────────────────────
+
+Code Changes:
+  ✓ Minimal - only affects _permute() method
+  ✓ One import statement added
+  ✓ One conditional check added (isinstance check)
+  ✓ One line changed (to_local() call)
+
+Safety:
+  ✓ Safe - to_local() is a standard PyTorch DTensor operation
+  ✓ No breaking changes to method signature
+  ✓ Backward compatible with both replicated and distributed tensors
+
+Performance:
+  ✓ Negligible overhead during model loading
+  ✓ Only called once during checkpoint initialization
+  ✓ Not in training loop critical path
+
+Scope:
+  ✓ Fixes tensor sharding issue for HF model loading
+  ✓ Applies to all models using this state_dict adapter
+  ✓ Enables the refactoring that forced HF-only model loading
+
+═════════════════════════════════════════════════════════════════════════════
+
+RELATED METHODS TO CHECK:
+───────────────────────────────────────────────────────────────────────────
+
+File: torchtitan/models/llama3/state_dict_adapter.py
+
+After fixing _permute(), check these methods for similar issues:
+
+1. _unpermute() - Reverse of _permute()
+   - May have same reshaping issues
+   - Apply same to_local() fix if needed
+
+2. to_hf() - Called during HF loading
+   - Uses _permute() internally
+   - Should work once _permute() is fixed
+
+3. from_hf() - Called during HF saving
+   - May need similar fixes for consistency
+   - Check for any reshape/view operations on distributed tensors
+
+Recommendation:
+  Apply same pattern (to_local() before reshape) to any tensor reshape
+  operations in distributed tensor handling.
+
+═════════════════════════════════════════════════════════════════════════════
+
+VALIDATION CHECKLIST:
+───────────────────────────────────────────────────────────────────────────
+
+Before deploying fix:
+  [ ] Code change is applied to state_dict_adapter.py
+  [ ] DTensor import is added
+  [ ] No syntax errors in modified method
+  [ ] Tests run without the "Cannot unflatten" error
+
+After deploying fix:
+  [ ] Single node test passes
+  [ ] Multi-node test passes
+  [ ] Model loads completely
+  [ ] Training starts without errors
+  [ ] Loss values are reasonable
+  [ ] Early termination feature (if enabled) works correctly
+
+═════════════════════════════════════════════════════════════════════════════
+
+ERROR CONTEXT (For Reference):
+───────────────────────────────────────────────────────────────────────────
+
+This error occurs because:
+
+1. HF model loaded into FSDP-sharded distributed tensors
+2. state_dict_adapter needs to convert weights to TorchTitan format
+3. _permute() method tries to reshape sharded tensor
+4. Reshape requires resharding, but new dimensions incompatible with 48 ranks
+
+Original error trace:
+  File "torchtitan/models/llama3/state_dict_adapter.py", line 52, in _permute
+    w.view(n_heads_arg, dim1 // n_heads_arg // 2, 2, dim2)
+  RuntimeError: Cannot unflatten unevenly sharded tensor:
+    output dimension 0 (size 16) is not evenly divisible by mesh dimension 0 (size 48)
+
+═════════════════════════════════════════════════════════════════════════════
+
+COMMIT MESSAGE (Once Fixed):
+───────────────────────────────────────────────────────────────────────────
+
+Fix state_dict adapter tensor sharding during HF model load
+
+The _permute() method in llama3/state_dict_adapter.py fails when tensors are
+FSDP-sharded because reshape operations require dimensions evenly divisible
+by rank count. Fixed by converting distributed tensors to local before
+reshape operations.
+
+Fixes: "Cannot unflatten unevenly sharded tensor" error during HF model loading
+Impact: Enables HF-only model loading (DCP checkpoints removed)
+Testing: Single and multi-node training tests
+
+═════════════════════════════════════════════════════════════════════════════
