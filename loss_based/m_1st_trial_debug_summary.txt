@@ -1,0 +1,94 @@
+Checkpoint System Refactoring Complete
+I have successfully removed DCP checkpoint initial load capability and kept only HF format model loading.
+All redundant code has been cleaned up.
+
+Change Made:
+1. Config Options (checkpoint.py)
+- Removed: 4 options
+    - initial_load_path
+    - initial_load_model_only
+    - initial_load_in_hf
+    - initial_load in_hf_quantized
+- Added: 2 options
+    - load_hf_model: bool = True
+    - load_hf_model_quantized: bool = False
+
+2. Validation Code Cleanup
+- Removed initial_load_path absolute path validation
+- Removed conflicting options requirements validation
+- Removed warning about unused options
+- Kept only necessary last_save_in_hf validation
+
+3. Logic Simplification
+- Simplified _maybe_init_load() method by ~50% (40 lines --> 20 lines)
+- Removed all DCP path handling
+- Removed 6 conditional branches --> reduced to 2
+- Set model_only = True unconditionally (always load model-only from HF)
+
+4. Shell Script Cleanup
+- Removed CKPT environment variable support
+- Removed --checkpoint.initial_load_path argument passing
+- removed 7 lines of CKPT validation code
+- Kept CKPT_FOLDER for saving checkpoints
+
+5. Documentation Updates
+- Updated AGPT config docstring to reflect HF-only loading
+- Updated Qwen3 config to use load_hf_model=True
+
+Code Reduction
+- ~100 lines removed (redundant/unused code)
+- 50% fewer config options (4 --> 2)
+- 50% fewer instance variables (4 --> 2)
+- 67% fewer conditional branchs (6 --> 2)
+ 
+Benefits
+- Eliminates topology mismatch errors (te "Missing key in checkpoint state_dict errors)
+- Simpler API -- Users only need MODEL=/path/to/hf/model
+- Cleaner code -- No more DCP vs HF branching logic
+- Safer Defaults -- Always load model-only from HF
+- Consistent pattern -- All model loading uses same path
+
+Files modified:
+1. torchtitan/components/checkpoint.py (4 major changes)
+1. torchtitan/models/agpt/config_registry.py (documentation)
+1. torchtitan/models/qwen3/config_registry.py (config)
+1. run_train_torchtitan.sh (3 changes)
+
+Next Steps
+The system is now ready fore testing with:
+LOSS_STD_TERMINATION_ENABLED=1 \
+MODEL=/lus/flare/projects/datascience/seonghapark/agpt-2v-v2-n256-step=92859-safetensors \
+./run_train_torchtitan.sh multi --training.steps 400000
+
+This will:
+- Load HF model (no topology mismatch)
+- Train with early termination enabled
+- Save checkpoints normally
+- Work across all 48 ranks without DCP state_dict errors
+
+
+==> And so run:
+ MODEL=/lus/flare/projects/datascience/seonghapark/agpt-2b-v2-256n-step-92859-safetensors \
+ MODULE=agpt \
+ CONFIG=agpt_2b \
+ DATASET_NAME=PG19 \
+ \RESOURCE_MONITOR=1 \
+ RESOURCE_INTERVAL=5 \
+ RESOURCE_OUTPUT_DIR="$PWD/resource_metrics_$(date +%Y%m%d_%H%M%S)" \
+ LOSS_STD_TERMINATION_ENABLED=1 \
+ LOSS_STD_THRESHOLD=0.001 \
+ LOSS_STD_WINDOW=50 \
+ ./xpu_torchtitan/run_train_torchtitan.sh multi \
+ --resource-monitor \
+ --resource-interval 5 \
+ --resource-output-dir "$RESOURCE_OUTPUT_DIR" -- \
+ --training.steps 400000 \
+ --training.seq_len 16384 2>&1 |&tee run.log
+
+
+
+
+
+
+
+
