@@ -83,3 +83,9 @@ This will:
 - Start training from scratch with convergence-based early termination enabled
 - Run all 48 ranks successfully
 
+
+==> Remove current capability of "Checkpoint Initial Load" and only accept HF model. Then remove "checkpoint.initial_load_model_only" option because now loading the model from "MODEL_PATH" is the
+only way. Check if there are redundant codes because of the two options. If there are, remove and
+clean them.
+
+
