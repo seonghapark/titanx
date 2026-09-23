@@ -1,0 +1,89 @@
+Errors, Warnings, and Analysis
+
+ERRORS:
+1. "Unrecognized options: true" (Critical -- Repeated 48+ times)
+- Lines: 70-456 (alternating with other output)
+- Frequency: ~48 identical errors (one per training rank)
+- Severity: CRITICAL -- prevents all training ranks from launching
+
+WARNINGS:
+2. "initial_load_model_only=True has not effect without an initial_load_path" (Non-critical)
+- Lines: 29-68, 103-105, 116-118, 238-243, 304-306
+- Frequency: Multiple instances across ranks
+- Severity: Low -- informational warning, no functional impact
+
+---
+
+Root Cause Analysis
+
+Error: "Unrecognized options: true"
+Why It's Happening:
+The command on line 19 shows: --training.enable_loss_std_termination=True
+This is correctly formatted with equals syntax, However, tyro is still rejecting it. Looking deeper:
+1. The argument format is syntactically correct
+2. But tyro's parser is rejecting the literal word "true" as unrecognized
+3. This suggests tyro does not accept boolean values with equals syntax at all
+   for the activation-checkpoint related arguments
+
+The core issue: Tyro expects boolean flags in one of these formats:
+- Flag-only (no value): --training.enable_loss_std_termination (presence=true, absence=false)
+- Numeric: --training.enable_loss_std_termination=1 or =0
+- NOT: --training.enable_loss_std_termination=true (rejected)
+
+Warning: "initial_load_model_only=True has not effect without an initial_load_path"
+Why It's Happening:
+- The training config has initial_load_model_only=True set by default
+- But --checkpoint.initial_load_path IS actually provided in the command (line 19)
+- This appears to be a timing/ordering issue in the config initialization
+- The warning fires before the checkpoint path is fully processed
+
+Impact: Benign -- the actual checkpoint IS loading correctly (based on the argument being present)
+
+---
+
+Solutions
+Solution 1: Fix Boolean Argument Format (Primary)
+Test if tyro accepts boolean flags without values:
+Replace:
+--training.enable_loss_std_termination=true
+With (flag-only format):
+--training.enable_loss_std_termination
+Or test with numeric values:
+--training.enable_loss_std_termination=1
+Where to change: run_train_torchtitan.sh lines 217-223
+
+Update code:
+if ! has_extra_arg "--training.enable_loss_std_termination"; then
+  if [[ "$LOSS_STD_TERMINATION_ENABLED" == "1" ]]; then
+    TRAIN_CMD+=("--training.enable_loss_std_termination")
+  fi
+fi
+
+Or with numeric:
+if ! has_extra_arg "--training.enable_loss_std_termination"; then
+  if [[ "$LOSS_STD_TERMINATION_ENABLED" == "1" ]]; then
+    TRAIN_CMD+=("--training.enable_loss_std_termination=1")
+  else
+    TRAIN_CMD+=("--training.enable_loss_std_termination=0")
+  fi
+fi
+
+Solution 2: Suppress Warning (Secondary)
+The warning about initial_load_model_only can be fixed by setting the config value to False
+by default in torchtitan/config/configs.py:
+Look for where initial_load_model_only is defined and change:
+initial_load_model_only: bool = False # Changed from True
+
+---
+
+Recommendation
+Priority 1: Test tyro's expected boolean format
+- Try flag-only format: --traininig.enable_loss_std_temination (no value)
+- Try numeric format: --traininig.enable_loss_std_temination=1
+- Check tyro documentation or existing config examples for boolean patterns
+Priority 2: Once boolean format is confirmed, update the shell script consistently
+Priority 3: Fix the initial_load_model_only warning (low priority, minimal impact)
+
+
+
+
