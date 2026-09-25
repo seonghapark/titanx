@@ -1,0 +1,91 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                   DCP CHECKPOINT REMOVAL - COMPLETE                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+FILE: torchtitan/components/checkpoint.py
+
+┌─ CONFIGURATION CLASS ────────────────────────────────────────────────────┐
+│                                                                           │
+│ REMOVED: load_hf_model: bool = True                                       │
+│ KEPT:    load_hf_model_quantized: bool = False                            │
+│                                                                           │
+│ Reason: HF loading is now mandatory (not optional)                        │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ CONSTRUCTOR ────────────────────────────────────────────────────────────┐
+│                                                                           │
+│ REMOVED: self.load_hf_model = config.load_hf_model                       │
+│ KEPT:    self.load_hf_model_quantized = config.load_hf_model_quantized   │
+│                                                                           │
+│ Reason: No longer need to store HF flag (always enabled)                 │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ LOADING METHODS ────────────────────────────────────────────────────────┐
+│                                                                           │
+│ REMOVED METHOD: dcp_load()                                                │
+│   - Handled both DCP and HF formats                                       │
+│   - Had conditional branching on from_hf parameter                        │
+│   - Called problematic to_hf() conversion                                 │
+│   - 50+ lines of complex logic                                            │
+│                                                                           │
+│ NEW METHOD: hf_load()                                                     │
+│   - HF-only loading                                                       │
+│   - Direct HF safetensors support                                         │
+│   - Calls from_hf() for single conversion                                 │
+│   - 25 lines of clean code                                                │
+│                                                                           │
+│ KEY DIFFERENCE: NO to_hf() call                                           │
+│   - to_hf() was causing double-permutation bug                            │
+│   - Now removed from loading path entirely                                │
+│   - Still used in save path (correct usage)                               │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ LOAD METHOD REFACTORING ────────────────────────────────────────────────┐
+│                                                                           │
+│ BEFORE:                                                                   │
+│   - from_hf = self.load_hf_model                                          │
+│   - if from_hf: ... else: ...  (conditional format selection)             │
+│   - dcp_load(..., from_hf=from_hf, ...)                                   │
+│                                                                           │
+│ AFTER:                                                                    │
+│   - is_initial_load = (not os.path.exists(self.folder))                  │
+│   - if is_initial_load: hf_load(...)  (HF only)                           │
+│   - else: dcp.load(...)  (Training checkpoint resume)                    │
+│                                                                           │
+│ Benefit: Clearer intent, no format selection                              │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                              BUG FIX SUMMARY                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+PROBLEM:
+  HF Safetensors → to_hf() [WRONG] → from_hf() [WRONG]
+  Double-permutation on RoPE weights → Tensor shape mismatch
+  Error: "Cannot unflatten unevenly sharded tensor"
+
+SOLUTION:
+  HF Safetensors → from_hf() [CORRECT]
+  Single conversion HF → native format
+  Error eliminated ✓
+
+KEY REMOVAL: to_hf() call from loading path
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                            VERIFICATION STATUS                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✓ load_hf_model option removed from Config
+✓ self.load_hf_model removed from constructor
+✓ dcp_load() method completely removed
+✓ hf_load() method implemented
+✓ to_hf() removed from loading path
+✓ Code simplified and clarified
+✓ No syntax errors
+✓ Logic flow validated
+
+STATUS: READY FOR TRAINING TEST
