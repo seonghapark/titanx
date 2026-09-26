@@ -1,0 +1,301 @@
+================================================================================
+            MODEL FORMAT CONVERSION - QUICK REFERENCE CARD
+================================================================================
+
+Location: /lus/flare/projects/datascience/seonghapark/xpu_launcher/
+
+================================================================================
+WHAT'S NEW
+================================================================================
+
+✓ convert_model_format.py              (17 KB) Format converter tool
+✓ start_training_with_conversion.sh    (7.6 KB) Training with auto-conversion
+✓ MODEL_FORMAT_GUIDE.md                (14 KB) Complete documentation
+✓ MODEL_CONVERSION_SETUP.md            (12 KB) Setup and integration guide
+
+================================================================================
+THREE WAYS TO START TRAINING
+================================================================================
+
+WAY 1: Direct Training (HF Models Only)
+  ./start_training.sh --model-path /path/to/hf/model
+
+WAY 2: Auto-Convert (RECOMMENDED)
+  ./start_training_with_conversion.sh --model-path /path/to/dcp/or/hf/model
+
+WAY 3: Manual Conversion
+  python3 convert_model_format.py --dcp /path/to/dcp --output /path/to/hf
+  ./start_training.sh --model-path /path/to/hf/model
+
+================================================================================
+QUICK COMMANDS
+================================================================================
+
+Check Model Format:
+  python3 convert_model_format.py --check-format /path/to/model
+
+Convert Single Model:
+  python3 convert_model_format.py --dcp /input --output /output --verbose
+
+Batch Convert Directory:
+  python3 convert_model_format.py --batch /source --output /dest --verbose
+
+Preview (Dry-Run):
+  ./start_training_with_conversion.sh --model-path /model --dry-run
+
+Train with Auto-Conversion:
+  ./start_training_with_conversion.sh --model-path /model --training-steps 5000
+
+Multi-Node with Conversion:
+  ./start_training_with_conversion.sh --model-path /model --mode multi \
+    --hostfile nodes.txt --training-steps 50000
+
+================================================================================
+MODEL FORMATS
+================================================================================
+
+HF Format (Hugging Face) - PREFERRED
+  ├── config.json
+  ├── model.safetensors (or pytorch_model.bin)
+  ├── tokenizer.json
+  └── [other assets]
+  ✓ Ready for TorchTitan training
+  ✓ Compatible with HF ecosystem
+
+DCP Format (Distributed Checkpoint) - NEEDS CONVERSION
+  ├── __0_0/
+  │   ├── model_state_dict-*.pt
+  │   └── ...
+  ├── metadata.json
+  └── [config if available]
+  ✗ Not compatible with TorchTitan directly
+  ✓ Can be converted to HF automatically
+
+================================================================================
+FORMAT DETECTION
+================================================================================
+
+HF Format Detected If:
+  ✓ Has config.json
+  ✓ Has model weights (.safetensors, .bin, etc)
+
+DCP Format Detected If:
+  ✓ Has __0_0 directory (sharded)
+  ✓ Has metadata.json
+  ✓ Has PyTorch checkpoint files (.pt, .bin)
+
+Check Format:
+  python3 convert_model_format.py --check-format /model
+
+  Output:
+  ✓ Model is in Hugging Face format
+  ✗ Model is in DCP format (needs conversion)
+  ? Format is unknown
+
+================================================================================
+CONVERSION OPTIONS
+================================================================================
+
+Single Model Conversion:
+  python3 convert_model_format.py \
+    --dcp /path/to/dcp/model \
+    --output /path/to/output \
+    [--verbose]                    # Show details
+    [--skip-validation]            # Skip validation after
+
+Batch Conversion:
+  python3 convert_model_format.py \
+    --batch /source/directory \
+    --output /destination \
+    [--pattern "glob"]             # File pattern (default: *)
+    [--verbose]
+
+With Training Wrapper:
+  ./start_training_with_conversion.sh \
+    --model-path /model \
+    [--output-dir /converted]      # Where to save conversions
+    [--no-auto-convert]            # Fail if distcp
+    [--delete-converted]           # Delete after training
+    [--dry-run]                    # Preview
+    [--verbose]
+
+================================================================================
+USAGE EXAMPLES
+================================================================================
+
+1. Train HF Model Directly:
+   ./start_training.sh --model-path /path/to/model
+
+2. Auto-Convert and Train (SIMPLEST):
+   ./start_training_with_conversion.sh --model-path /path/to/model
+
+3. Convert Before Training:
+   python3 convert_model_format.py --dcp /model.dcp --output /model_hf
+   ./start_training.sh --model-path /model_hf
+
+4. Multi-Node with Conversion:
+   ./start_training_with_conversion.sh \
+     --model-path /model \
+     --mode multi \
+     --hostfile nodes.txt
+
+5. Batch Convert All Models:
+   python3 convert_model_format.py \
+     --batch /checkpoints \
+     --output /models_hf
+
+6. Preview Before Converting:
+   ./start_training_with_conversion.sh --model-path /model --dry-run
+
+================================================================================
+COMMON ISSUES & SOLUTIONS
+================================================================================
+
+Issue: "Model is in DCP format (needs conversion)"
+  Solution 1: Use auto-conversion wrapper
+    ./start_training_with_conversion.sh --model-path /model
+  Solution 2: Convert manually first
+    python3 convert_model_format.py --dcp /model --output /model_hf
+
+Issue: "Could not load DCP checkpoint"
+  Solution: Check checkpoint exists and has correct structure
+    ls -la /path/to/dcp/
+    python3 convert_model_format.py --check-format /path/to/dcp
+
+Issue: "No module named 'torch'"
+  Solution: Use correct Python with torch installed
+    PYTHON_BIN=/path/to/python convert_model_format.py ...
+
+Issue: "Could not detect model format"
+  Solution: Check if model structure is valid
+    ls -la /path/to/model/
+
+================================================================================
+ENVIRONMENT VARIABLES
+================================================================================
+
+PYTHON_BIN=/path/to/python
+  Specify Python binary for conversion
+
+CONVERT_OUTPUT_DIR=/tmp/models
+  Where to save converted models
+
+AUTO_CONVERT=0
+  Disable auto-conversion (fail on distcp)
+
+KEEP_CONVERTED=1
+  Keep converted models after training
+
+VERBOSE=1
+  Enable verbose output
+
+================================================================================
+CONVERSION TIME ESTIMATES
+================================================================================
+
+2B Model (10GB):        5-30 seconds
+8B Model (40GB):        30-60 seconds
+70B Model (350GB):      2-5 minutes
+
+Disk Space Needed: ~2x model size
+
+================================================================================
+VALIDATION
+================================================================================
+
+After Conversion, Check:
+  ✓ config.json exists
+  ✓ model.safetensors exists (or pytorch_model.bin)
+  ✓ Can be loaded
+
+Quick Validation:
+  python3 convert_model_format.py --check-format /converted/model
+
+  Should output:
+  ✓ .../model is in Hugging Face format
+
+================================================================================
+DOCUMENTATION
+================================================================================
+
+Detailed Guides:
+  MODEL_FORMAT_GUIDE.md         Format specifications and patterns
+  MODEL_CONVERSION_SETUP.md     Setup and integration
+
+Script Help:
+  ./start_training_with_conversion.sh --help
+  python3 convert_model_format.py --help
+
+Related:
+  TRAINING_GUIDE.md             Training configuration
+  start_training.sh             Direct training (HF only)
+  README.md                     xpu_launcher docs
+
+================================================================================
+COMMAND REFERENCE
+================================================================================
+
+Converter:
+  python3 convert_model_format.py \
+    --dcp PATH                 # Input DCP model
+    --output PATH              # Output HF directory (required)
+    --batch DIR                # Batch convert directory
+    --pattern "*.dcp"          # File pattern
+    --skip-validation          # Skip validation
+    --verbose                  # Detailed output
+    --check-format PATH        # Check format only
+
+Training Wrapper:
+  ./start_training_with_conversion.sh \
+    --model-path PATH          # Model directory (required)
+    --output-dir DIR           # Converted models directory
+    --no-auto-convert          # Don't convert (fail on distcp)
+    --delete-converted         # Delete after training
+    --dry-run                  # Preview
+    --verbose                  # Detailed output
+    [training options...]
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Read MODEL_FORMAT_GUIDE.md for complete documentation
+
+2. Check your model format:
+   python3 convert_model_format.py --check-format /your/model
+
+3. Choose your approach:
+   Option A (Simplest): Auto-conversion wrapper
+     ./start_training_with_conversion.sh --model-path /model
+   
+   Option B (Direct): Manual conversion first
+     python3 convert_model_format.py --dcp /model --output /model_hf
+     ./start_training.sh --model-path /model_hf
+
+4. Start training!
+
+================================================================================
+SUPPORT & HELP
+================================================================================
+
+Get Help:
+  ./start_training_with_conversion.sh --help
+  python3 convert_model_format.py --help
+
+Read Documentation:
+  - MODEL_FORMAT_GUIDE.md (complete guide)
+  - MODEL_CONVERSION_SETUP.md (setup details)
+
+Test with Dry-Run:
+  ./start_training_with_conversion.sh --model-path /model --dry-run
+
+Enable Verbose:
+  VERBOSE=1 ./start_training_with_conversion.sh --model-path /model
+
+================================================================================
+
+Generated: 2026-09-26
+Status: ✅ Ready for use
+Support: See MODEL_FORMAT_GUIDE.md
+
+================================================================================
