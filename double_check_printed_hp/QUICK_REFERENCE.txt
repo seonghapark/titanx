@@ -1,0 +1,125 @@
+================================================================================
+HYPERPARAMETER TRACKING - QUICK REFERENCE
+================================================================================
+
+CURRENT COVERAGE:
+  ✓  23 parameters (34%) fully tracked & printed
+  ⚠️  7 parameters (10%) available but not pre-printed  
+  ❌ 36 parameters (54%) missing/not tracked
+
+WHAT IS PRINTED PRE-TRAINING:
+  [LAUNCH MODE]           NNODES, NPROC_PER_NODE, NPROC, Auto Retry, Spare Nodes
+  [MODEL & DATASET]       Model Path, Module/Config, Dataset Name/Path
+  [TRAINING]              Training Steps, Seq Len, Loss Std settings
+  [SYSTEM & PATHS]        Paths and Python binary
+  [MONITORING]            Resource monitor settings
+  [EXTRA ARGUMENTS]       Anything after --
+
+WHAT IS NOT PRINTED PRE-TRAINING (Most Important Ones):
+
+  OPTIMIZATION:
+    ❌ learning_rate       → In config_registry but not pre-printed (shown during training)
+    ❌ optimizer_type      → Hardcoded as AdamW (shown during training)
+    ❌ betas               → In default_adamw() (shown during training)
+    ❌ weight_decay        → In optimizer config (shown during training)
+    ❌ max_norm (grad clip) → In training.max_norm but NOT printed
+
+  MODEL ARCHITECTURE:
+    ❌ activation_function → Hardcoded as SiLU in model
+    ❌ dropout_rate        → Hardcoded in model layers
+    ❌ normalization_type  → RMSNorm hardcoded
+
+  CONTEXT EXTENSION (YOUR AGPT-YARN):
+    ❌ rope_backend_type   → Available in model but NOT printed
+    ❌ context_technique   → YaRN available but NOT printed
+    ❌ yarn_alpha          → Available but NOT printed
+    ❌ yarn_beta           → Available but NOT printed
+
+  MODEL PROVENANCE (YOUR AGPT-2B):
+    ❌ current_model_name  → agpt_2b_yarn (not printed)
+    ❌ base_model_name     → Llama3 (implicit, not printed)
+    ❌ original_model_name → AGPT-2B (known but not printed)
+
+  INITIALIZATION:
+    ❌ random_seed         → Not exposed in config
+    ❌ weight_init_method  → TorchTitan default
+    ❌ bias_init_method    → TorchTitan default
+
+  DATA:
+    ❌ dataset_size        → Not tracked
+    ❌ train_val_split     → Hardcoded as 5% validation
+    ❌ preprocessing       → Dataset-specific
+
+================================================================================
+HOW TO CHECK THIS YOURSELF:
+================================================================================
+
+# Run the standalone hyperparameter analysis (no TorchTitan required):
+python3 hyperparameters_standalone.py
+
+# Show only missing hyperparameters:
+python3 hyperparameters_standalone.py | grep "❌"
+
+# Get full report with recommendations:
+python3 hyperparameters_standalone.py --full
+
+# See only recommendations:
+python3 hyperparameters_standalone.py --recommendations
+
+================================================================================
+WHAT YOUR AGPT-2B TRAINING IS MISSING:
+================================================================================
+
+FROM YOUR COMMAND:
+  MODULE=agpt_yarn
+  CONFIG=agpt_2b_yarn
+  MODEL=/lus/flare/.../agpt-2b-v2-256n-step-92859-safetensors
+
+SHOULD ALSO PRINT (but doesn't):
+  Current Model:      AGPT-2B (from agpt_2b_yarn)
+  Base Model:         Llama3 (AgptModel extends Llama3Model)
+  Context Extension:  YaRN (from "agpt_yarn" naming)
+  Init Checkpoint:    agpt-2b-v2-256n-step-92859-safetensors
+  Activation:         SiLU (hardcoded in AGPT)
+  Normalization:      RMSNorm (hardcoded in AGPT)
+  Dropout:            Check config_registry.py for actual value
+
+================================================================================
+INTEGRATION CHECKLIST:
+================================================================================
+
+[ ] Run: python3 hyperparameters_standalone.py --full > hyperparams_status.txt
+[ ] Run: grep "❌" hyperparams_status.txt to identify gaps for your setup
+[ ] For AGPT-2B, priority additions:
+    [ ] Add RoPE/YaRN detection to launch config
+    [ ] Add model provenance (current/base/original names)
+    [ ] Print context extension technique and parameters
+[ ] Review: HYPERPARAMETER_ANALYSIS_SUMMARY.md for detailed recommendations
+
+================================================================================
+FILES CREATED:
+================================================================================
+
+1. hyperparameters.py
+   - Full-featured extraction (requires TorchTitan env)
+   - Usage: python hyperparameters.py --missing-only
+
+2. hyperparameters_standalone.py
+   - Works anywhere, no dependencies
+   - Usage: python3 hyperparameters_standalone.py [--full] [--recommendations]
+
+3. HYPERPARAMETER_TRACKING_STATUS.md
+   - Detailed tracking status document
+   - Implementation recommendations
+   
+4. HYPERPARAMETER_ANALYSIS_SUMMARY.md
+   - Executive summary
+   - Quick reference tables
+   - Priority-ranked recommendations
+
+5. QUICK_REFERENCE.txt (this file)
+   - Quick lookup for common questions
+
+================================================================================
+END OF QUICK REFERENCE
+================================================================================
