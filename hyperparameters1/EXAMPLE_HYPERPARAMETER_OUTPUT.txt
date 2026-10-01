@@ -1,0 +1,132 @@
+================================================================================
+TRAINING LAUNCH CONFIGURATION
+================================================================================
+
+[LAUNCH MODE]
+  Mode                   = single
+  Topology               = NNODES=auto NPROC_PER_NODE=4 NPROC=auto
+  Auto Retry             = 1(multi)
+  Spare Nodes            = auto
+
+[MODEL & DATASET]
+  Model Path             = /path/to/Llama-3.1-8B
+  Module/Config          = llama3 / llama3_8b
+  Dataset Name           = c4
+  Dataset Path           = allenai/c4
+  HF Assets Path         = /path/to/Llama-3.1-8B
+
+[TRAINING HYPERPARAMETERS]
+  Training Steps         = 2000
+  Sequence Length        = 4096
+  Loss Std Termination   = 0 (threshold: 0.001, window: 50)
+
+[SYSTEM & PATHS]
+  TorchTitan Root        = /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/torchtitan_repo
+  Log Directory          = /path/to/outputs/xpu_torchtitan_20260929_143022
+  Checkpoint Folder      = checkpoint
+  Checkpoint Load        = <unset>
+  Python Binary          = /lus/flare/projects/datascience/seonghapark/venv/bin/python
+
+[MONITORING]
+  Resource Monitor       = 1
+  Resource Interval      = 5s
+  Resource Output Dir    = /path/to/outputs/xpu_torchtitan_20260929_143022/resource_metrics
+
+[EXTRA ARGUMENTS]
+  Additional Args        = <none>
+
+================================================================================
+
+---
+
+Then during training startup, you would see:
+
+================================================================================
+TRAINING HYPERPARAMETERS AND CONFIGURATION
+================================================================================
+
+[MODEL]
+  Model Name: llama3
+  Model Flavor: llama3_8b
+  Architecture: Llama
+  Rope Scaling Type: yarn
+  Rope Theta: 10000000.0
+
+[TRAINING]
+  Learning Rate: 3e-05
+  Total Training Steps: 2000
+  Sequence Length: 4096
+  Global Batch Size: 128
+  Micro Batch Size: 4
+  Gradient Accumulation Steps: 32
+  Data Type: bfloat16
+
+[OPTIMIZER]
+  Optimizer Type: AdamW
+  Learning Rate: 3e-05
+  Weight Decay: 0.1
+  Betas (Adam): (0.9, 0.95)
+  Epsilon: 1e-08
+
+[LR SCHEDULER]
+  LR Scheduler Type: CosineAnnealingWarmRestarts
+  Warmup Steps: 400
+  Min LR Ratio: 0.1
+
+[PARALLELISM]
+  Tensor Parallel Size (TP): 4
+  Pipeline Parallel Size (PP): 1
+  Data Parallel Size (DP): 8
+  Context Parallel Size (CP): 1
+  SPMD Backend: spmd_types
+  Sequence Parallel: DISABLED
+
+[DATA]
+  Dataset Name: c4
+  Dataset Path: allenai/c4
+
+[FILE PATHS]
+  HF Assets Path: /path/to/Llama-3.1-8B
+  Tokenizer Config: /path/to/Llama-3.1-8B/tokenizer_config.json
+  Tokenizer File: /path/to/Llama-3.1-8B/tokenizer.json
+  Model Config: /path/to/Llama-3.1-8B/config.json
+
+[ARCHITECTURE DETAILS]
+  Hidden Dimension: 4096
+  Number of Layers: 32
+  Number of Attention Heads: 32
+  Number of KV Heads: 8
+  Vocabulary Size: 128256
+  Intermediate Dimension (FFN): 14336
+
+[MEMORY OPTIMIZATION]
+  Activation Checkpoint Type: SelectiveAC
+  Compile Enabled: True
+  Compiled Components: model
+
+[CHECKPOINT]
+  Checkpoint Enabled: True
+  Checkpoint Folder: checkpoint
+  Checkpoint Interval (steps): steps
+
+[DISTRIBUTED]
+  World Size: 32
+  Global Rank: 0
+  Local Rank: 0
+
+================================================================================
+
+---
+
+KEY PARAMETERS VISIBLE:
+✓ Learning Rate: 3e-05
+✓ Tensor Parallel Size: 4
+✓ Architecture Name: Llama (with YaRN rope_scaling detected)
+✓ Global Batch Size: 128
+✓ Micro Batch Size: 4
+✓ Sequence Length: 4096
+✓ Pipeline Parallel Size: 1
+✓ Data Parallel Size: 8
+✓ Number of Layers: 32
+✓ Hidden Dimension: 4096
+✓ And many more...

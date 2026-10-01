@@ -1,0 +1,172 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                 XPU LAUNCHER - TRAINING WITH CONVERSION                     ║
+║                         Quick Reference Card                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+KEY IMPROVEMENT: start_training_with_conversion.sh now works WITHOUT hostfile
+                 in multi-node mode (uses PBS_NODEFILE automatically)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 CHECKPOINT LOCATION
+
+From 1st successful training (step 2062):
+  /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/
+  torchtitan_repo/outputs/xpu_torchtitan_20260925_160731/checkpoint/step-2062
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICK START (PBS Job)
+
+Create train_job.pbs:
+─────────────────────
+#!/bin/bash
+#PBS -l select=9:ngpus=1
+#PBS -l walltime=12:00:00
+#PBS -N train_agpt2b
+
+cd /lus/flare/projects/datascience/seonghapark/xpu_launcher
+
+./start_training_with_conversion.sh \
+  --model-path /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/torchtitan_repo/outputs/xpu_torchtitan_20260925_160731/checkpoint/step-2062 \
+  --mode multi \
+  -- --training.steps 400000 --training.seq_len 16384
+
+Submit:
+  qsub train_job.pbs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ DIRECT COMMANDS
+
+Single-node:
+  cd /lus/flare/projects/datascience/seonghapark/xpu_launcher
+  ./start_training_with_conversion.sh \
+    --model-path /path/to/checkpoint \
+    --mode single
+
+Multi-node (in PBS job):
+  cd /lus/flare/projects/datascience/seonghapark/xpu_launcher
+  ./start_training_with_conversion.sh \
+    --model-path /path/to/checkpoint \
+    --mode multi
+
+Preview without running (--dry-run):
+  ./start_training_with_conversion.sh \
+    --model-path /path/to/checkpoint \
+    --mode multi \
+    --dry-run --verbose
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 COMMAND OPTIONS
+
+Required:
+  --model-path PATH              Path to checkpoint (distcp or HF format)
+
+Mode:
+  --mode single|multi            Training mode (default: single)
+
+Hostfile (optional in PBS jobs):
+  --hostfile FILE                Use explicit hostfile (not needed with PBS_NODEFILE)
+
+Conversion:
+  --output-dir DIR               Where to save converted models
+  --delete-converted             Delete converted model after training
+
+Execution:
+  --dry-run                      Preview without running
+  --verbose                      Verbose output
+  --help                         Show help message
+
+Training (after --):
+  --training.steps N             Total training steps
+  --training.seq_len N           Sequence length
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 COMMON WORKFLOWS
+
+▶ Resume from checkpoint (multi-node):
+  cd /lus/flare/projects/datascience/seonghapark/xpu_launcher
+  qsub << 'EOF'
+  #!/bin/bash
+  #PBS -l select=9:ngpus=1
+  #PBS -l walltime=12:00:00
+  ./start_training_with_conversion.sh \
+    --model-path /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/torchtitan_repo/outputs/xpu_torchtitan_20260925_160731/checkpoint/step-2062 \
+    --mode multi \
+    -- --training.steps 400000 --training.seq_len 16384
+  EOF
+
+▶ Test on single node first:
+  ./start_training_with_conversion.sh \
+    --model-path /path/to/checkpoint \
+    --mode single \
+    -- --training.steps 100
+
+▶ Check model format:
+  ./start_training_with_conversion.sh \
+    --model-path /path/to/checkpoint \
+    --dry-run --verbose
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ VALIDATION
+
+Check if everything works (dry-run):
+  ./start_training_with_conversion.sh \
+    --model-path /lus/flare/projects/datascience/seonghapark/xpu_launcher/xpu_torchtitan/torchtitan_repo/outputs/xpu_torchtitan_20260925_160731/checkpoint/step-2062 \
+    --mode multi \
+    --dry-run --verbose
+
+Expected output:
+  [INFO] Detecting model format...
+  [DRY RUN] Model already in HF format, would execute:
+  [DRY RUN] Multi-mode without explicit hostfile: will use PBS_NODEFILE if available
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+Full usage guide:
+  /lus/flare/projects/datascience/seonghapark/TRAINING_WITH_CONVERSION_USAGE.md
+
+Script update summary:
+  /lus/flare/projects/datascience/seonghapark/SCRIPT_UPDATE_SUMMARY.md
+
+Quick-start template:
+  /lus/flare/projects/datascience/seonghapark/QUICK_START_TRAINING.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 TROUBLESHOOTING
+
+Error: "Multi-mode requires either --hostfile or PBS_NODEFILE"
+  ✓ You're not in a PBS job and didn't provide --hostfile
+  ✓ Solution: Submit as PBS job or use --hostfile
+
+Error: "Checkpoint path does not exist"
+  ✓ Path is wrong or relative
+  ✓ Solution: Use absolute path, verify it exists first
+
+Model conversion takes too long
+  ✓ Running on launch node
+  ✓ Solution: Pre-convert model once, reuse for multiple runs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 KEY DIFFERENCES FROM PREVIOUS VERSION
+
+Before: ./start_training_with_conversion.sh --model-path ... --mode multi --hostfile X
+Now:    ./start_training_with_conversion.sh --model-path ... --mode multi
+           (--hostfile optional, PBS_NODEFILE auto-used in PBS jobs)
+
+Benefit: Simpler PBS job scripts, matches run_train_torchtitan.sh behavior
+
+Backward compatible: Old scripts with --hostfile still work!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 Last Updated: 2026-09-26
+🔗 For help: ./start_training_with_conversion.sh --help

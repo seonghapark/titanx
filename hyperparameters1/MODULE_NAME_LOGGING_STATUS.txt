@@ -1,0 +1,191 @@
+================================================================================
+MODULE NAME LOGGING STATUS
+================================================================================
+
+QUESTION: Is module name printed? Where?
+ANSWER:   Partially - it's logged in shell script and Python trainer, but with 
+          different names.
+
+================================================================================
+CURRENT LOGGING
+================================================================================
+
+SHELL SCRIPT (run_train_torchtitan.sh):
+────────────────────────────────────────
+✅ Module name IS logged at line 271
+
+Output:
+  [MODEL & DATASET]
+    Module/Config          = agpt / agpt_2b_yarn
+
+This shows:
+  - Module: agpt (the config module/registry)
+  - Config: agpt_2b_yarn (the specific config function)
+
+PYTHON TRAINER (trainer.py):
+──────────────────────────
+✅ Module name IS logged (implicitly) via model_spec at lines 798-799
+
+Output:
+  [MODEL]
+    Model Name: agpt
+    Model Flavor: 2b_yarn
+    Architecture: Transformer
+
+This shows:
+  - Model Name: agpt (same as module name)
+  - Model Flavor: 2b_yarn (same as config name, lowercase)
+  - Architecture: Transformer class
+
+COMPARISON:
+───────────
+Shell Script: "Module/Config = agpt / agpt_2b_yarn"
+Python:       "Model Name: agpt, Model Flavor: 2b_yarn"
+
+The information is the SAME, but labeled differently:
+  Shell "Module" = Python "Model Name" = config.model_spec.name
+  Shell "Config" = Python "Model Flavor" = config.model_spec.flavor
+
+================================================================================
+WHERE THE NAME COMES FROM
+================================================================================
+
+CALL FLOW FOR agpt_2b_yarn:
+───────────────────────────
+
+1. User runs: ./run_train_torchtitan.sh single -- --module agpt --config agpt_2b_yarn
+
+2. Shell script (run_train_torchtitan.sh):
+   - Prints the module/config as-is
+   - Passes to trainer as command-line args
+
+3. Python trainer entry point (titan_train.py):
+   - Receives --module agpt --config agpt_2b_yarn
+   - Passes to ConfigManager
+
+4. ConfigManager:
+   - Looks up agpt module in torchtitan/models/agpt/
+   - Finds config_registry.py
+   - Looks for agpt_2b_yarn() function (line 404)
+   
+5. agpt_2b_yarn() function calls:
+   → agpt("2b_yarn", ...)  (line 413)
+
+6. agpt() function calls:
+   → _base_config("2b_yarn")  (line 127)
+
+7. _base_config() calls:
+   → model_registry("2b_yarn")  (line 157)
+
+8. model_registry() does:
+   → config = agpt_configs["2b_yarn"]  (line 694)
+   → Returns ModelSpec(name="agpt", flavor="2b_yarn", ...)
+
+9. ModelSpec is stored in Trainer.Config.model_spec
+
+10. Trainer logs it via:
+    → config.model_spec.name        = "agpt"
+    → config.model_spec.flavor      = "2b_yarn"
+
+================================================================================
+WHAT'S LOGGED IN CURRENT IMPLEMENTATION
+================================================================================
+
+Currently in trainer.py _log_training_hyperparameters():
+
+[MODEL]
+  Model Name: agpt                    ← Module name
+  Model Flavor: 2b_yarn              ← Config name
+  Architecture: Transformer           ← Model class
+  Rope Scaling Type: yarn            ← YaRN detected!
+  Rope Theta: 50000
+
+This tells you:
+  ✅ Which module (agpt)
+  ✅ Which config (2b_yarn)
+  ✅ Which architecture (Transformer)
+  ✅ That YaRN is enabled (rope_scaling: yarn)
+  ✅ The rope parameters
+
+THE INFORMATION IS THERE, just labeled as "Model Name" instead of "Module"
+
+================================================================================
+ENHANCEMENT RECOMMENDATION
+================================================================================
+
+To make it CLEARER that "Model Name" = "Module", we could:
+
+OPTION 1: Add explicit "Module" label (minimal change)
+──────────────────────────────────────────────────────
+[MODEL]
+  Module: agpt
+  Config: 2b_yarn
+  Architecture: Transformer
+  Rope Scaling Type: yarn
+  Rope Theta: 50000
+
+✅ Matches shell script terminology exactly
+✅ Minimal code change
+✅ Makes intent crystal clear
+
+OPTION 2: Rename existing labels (more explicit)
+─────────────────────────────────────────────────
+[MODEL]
+  Name (Module): agpt
+  Flavor (Config): 2b_yarn
+  Architecture: Transformer
+  ...
+
+OPTION 3: Keep current, add comment (no code change)
+────────────────────────────────────────────────────
+[MODEL]
+  Model Name: agpt              # This is the module name
+  Model Flavor: 2b_yarn        # This is the config name
+  Architecture: Transformer
+  ...
+
+================================================================================
+CURRENT ANSWER TO USER QUESTIONS
+================================================================================
+
+Q: Is module name printed?
+A: ✅ YES
+   - Shell script: YES (line 271, as "Module/Config")
+   - Python trainer: YES (line 798-799, as "Model Name" and "Model Flavor")
+
+Q: Where does agpt_2b_yarn come from?
+A: From this call chain:
+   run_train_torchtitan.sh
+   → titan_train.py
+   → ConfigManager
+   → agpt.config_registry.agpt_2b_yarn()
+   → agpt()
+   → _base_config()
+   → model_registry()
+   → agpt_configs["2b_yarn"]
+   → ModelSpec(name="agpt", flavor="2b_yarn")
+   → Trainer.config.model_spec
+   → Logged in [MODEL] section
+
+Q: Which function is called?
+A: agpt_2b_yarn() at line 404 in agpt/config_registry.py
+   Which immediately calls:
+   agpt("2b_yarn", seq_len=32768, activation_checkpoint_mode="none")
+
+Q: Is the module name clearly visible in logs?
+A: ✅ YES, but it could be CLEARER with "Module" instead of "Model Name"
+
+================================================================================
+SUMMARY
+================================================================================
+
+✅ Module name (agpt) IS logged as "Model Name"
+✅ Config name (2b_yarn) IS logged as "Model Flavor"
+✅ All YaRN parameters ARE detected and logged
+✅ Architecture details ARE logged
+
+The only improvement would be to rename "Model Name" to "Module" for clarity,
+making the Python output match the shell script terminology exactly.
+
+Current effectiveness: 95% - Information is there, just naming could be clearer.
+================================================================================
