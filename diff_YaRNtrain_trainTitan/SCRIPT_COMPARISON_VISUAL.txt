@@ -1,0 +1,384 @@
+================================================================================
+                   VISUAL COMPARISON & FLOWCHARTS
+================================================================================
+
+EXECUTION FLOW COMPARISON
+================================================================================
+
+train_agpt20b_yarn.sh                run_train_torchtitan.sh
+─────────────────────────────────────────────────────────────
+
+User types:                          User types:
+  ./train_agpt20b_yarn.sh              export MODULE=agpt
+  16384 400 8                          export CONFIG=agpt_20b_yarn
+                                       export MODEL_PATH=...
+                                       ./run_train_torchtitan.sh multi
+
+    │                                     │
+    ├─ Parse args (3 positional)          ├─ Parse mode + flags
+    │   seq_len=16384                     │   mode=multi
+    │   training_steps=400                │
+    │   num_nodes=8                       ├─ Merge env vars with defaults
+    │                                     │   20+ variables
+    ├─ Validate paths                     │
+    │   DCP checkpoint ✓                  ├─ Validate paths
+    │   Safetensors ✓                     │   MODEL ✓
+    │   YaRN config ✓                     │   Hostfile ✓
+    │                                     │   TORCHTITAN_ROOT ✓
+    ├─ Set 7 env vars                     │
+    │   MODULE=agpt                       ├─ Build TRAIN_CMD array
+    │   CONFIG=agpt_20b_yarn              │   titan_train.py
+    │   MODEL_PATH=...                    │   --module agpt
+    │   CKPT=...                          │   --config agpt_20b_yarn
+    │   SEQ_LEN=16384                     │   --hf_assets_path ...
+    │   TRAINING_STEPS=400                │   ... (10+ more args)
+    │   TP/PP/CP=...                      │
+    │                                     ├─ Optional: wrap with
+    ├─ Display config                     │   resource monitor
+    │                                     │
+    ├─ Determine mode                     ├─ Display full configuration
+    │   num_nodes=8 → multi               │   All env vars, all args
+    │                                     │
+    └─ Delegate:                          └─ Delegate:
+      ./run_train_torchtitan.sh             ./run_train.sh multi \
+      multi                                 hostfile -- \
+                                            ${TRAIN_CMD[@]}
+
+
+COMPLEXITY PYRAMID
+================================================================================
+
+train_agpt20b_yarn.sh                run_train_torchtitan.sh
+─────────────────────────────────────────────────────────────
+
+      ▲                                   ▲
+      │ TorchTitan                       │ TorchTitan
+      │ (all models)                     │ (all models)
+      │                                  │
+  ┌───┴────────┐                     ┌───┴──────────────┐
+  │ agpt-20b   │                     │ llama3           │
+  │ + YaRN     │                     │ agpt             │
+  │            │                     │ gpt_oss          │
+  └────────────┘                     │ deepseek_v3      │
+                                     │ (any config)     │
+  Limited config                     └──────────────────┘
+  High abstraction                   Full config
+  Simple interface                   Complex interface
+
+
+CUSTOMIZATION SPECTRUM
+================================================================================
+
+Limited ◄─────────────────── Customization ─────────────────► Full Control
+
+  │
+  │ train_agpt20b_yarn.sh
+  │ ├─ Fix: model, module, config
+  │ ├─ Flex: seq_len, training_steps, num_nodes
+  │ ├─ Override: CKPT, DATASET_NAME, TP/PP/CP
+  │ └─ No: monitoring, custom args, other models
+  │
+  │                    (semantic gap)
+  │
+  │ run_train_torchtitan.sh
+  │ ├─ Everything is configurable
+  │ ├─ 20+ environment variables
+  │ ├─ Unlimited extra args via --
+  │ ├─ All TorchTitan models supported
+  │ └─ Full transparency into execution
+  │
+  └─ Complete control
+
+
+FEATURE MATRIX
+================================================================================
+
+                                  train_  run_
+                                  agpt20b torch
+─────────────────────────────────────────────
+Basic Training                      ✅      ✅
+YaRN Configuration                  ✅      ✅
+Multiple Models                     ❌      ✅
+Custom Datasets                     ⚠️      ✅
+Resource Monitoring                 ❌      ✅
+Loss-based Termination              ❌      ✅
+Dry-run Mode                        ❌      ✅
+Custom TorchTitan Args              ❌      ✅
+Pre-flight Validation               ✅      ⚠️
+Domain-specific Errors              ✅      ❌
+One-command Launch                  ✅      ❌
+No Environment Setup                ✅      ❌
+
+✅ = Full support
+⚠️ = Partial/limited
+❌ = Not supported
+
+
+PARAMETER SCOPE COMPARISON
+================================================================================
+
+train_agpt20b_yarn.sh:
+
+  ┌──────────────────────────────────┐
+  │  Hardcoded (built-in)            │
+  │  ├─ model: agpt-20b              │
+  │  ├─ module: agpt                 │
+  │  ├─ config: agpt_20b_yarn        │
+  │  └─ paths: fixed                 │
+  │                                  │
+  │  Positional Arguments (3 args)   │
+  │  ├─ seq_len                      │
+  │  ├─ training_steps               │
+  │  └─ num_nodes                    │
+  │                                  │
+  │  Environment Variables (3-5)     │
+  │  ├─ CKPT (optional)              │
+  │  ├─ DATASET_NAME (optional)      │
+  │  └─ TP/PP/CP (optional)          │
+  └──────────────────────────────────┘
+
+run_train_torchtitan.sh:
+
+  ┌──────────────────────────────────┐
+  │  Mode Argument (required)        │
+  │  ├─ single                       │
+  │  └─ multi                        │
+  │                                  │
+  │  Optional Hostfile               │
+  │  (for multi mode)                │
+  │                                  │
+  │  Environment Variables (20+)     │
+  │  ├─ Model/Config (required)      │
+  │  ├─ Dataset/Paths                │
+  │  ├─ Hyperparameters              │
+  │  ├─ Parallelism (TP/PP/CP)       │
+  │  ├─ Resource Monitor Settings    │
+  │  └─ Loss Termination Settings    │
+  │                                  │
+  │  Flags                           │
+  │  ├─ --dry-run                    │
+  │  ├─ --resource-monitor           │
+  │  └─ --resource-interval          │
+  │                                  │
+  │  Extra Arguments (via --)        │
+  │  └─ Unlimited TorchTitan args    │
+  └──────────────────────────────────┘
+
+
+USE CASE DECISION TREE
+================================================================================
+
+                          START
+                            │
+                    Want to train agpt-20b?
+                         /        \
+                       YES         NO
+                        │           │
+                   With YaRN?      ──→ run_train_torchtitan.sh
+                      /   \
+                    YES    NO
+                     │      │
+      train_agpt20b ──    ──→ run_train_torchtitan.sh
+         _yarn.sh
+
+
+                    Alternative view:
+
+                        START
+                            │
+                Need custom config?
+                      /           \
+                    YES            NO
+                     │              │
+              Need monitoring?      Need simple
+                   / \          one-command?
+                 YES  NO           /    \
+                  │    │         YES    NO
+                  │    └─────→ agpt ────┐
+                  │              20b    │
+                  └─────→ run_train ────┘
+                         torchtitan
+
+
+TYPE OF USER → RECOMMENDED SCRIPT
+================================================================================
+
+Data Scientist (just wants to train)
+  └─ Use: train_agpt20b_yarn.sh
+     Reason: Simple, pre-validated, clear errors
+
+ML Engineer (needs customization)
+  └─ Use: run_train_torchtitan.sh
+     Reason: Full control, multiple models, advanced features
+
+Researcher (experimenting with configs)
+  └─ Use: run_train_torchtitan.sh
+     Reason: Easy to try different parameters
+
+DevOps (managing training infrastructure)
+  └─ Use: run_train_torchtitan.sh
+     Reason: Monitor resources, fine control
+
+Student (learning ML)
+  └─ Use: train_agpt20b_yarn.sh
+     Reason: Start simple, graduate to run_train_torchtitan.sh
+
+Framework Developer
+  └─ Use: run_train_torchtitan.sh
+     Reason: Need transparency, custom args
+
+
+COMMAND COMPLEXITY GRAPH
+================================================================================
+
+                                run_train_torchtitan.sh
+                                  (multiple exports)
+                                  (longer command)
+Complexity                        /
+    High │                      /
+         │                    /
+         │                  /
+         │                /
+         │              /
+         │            /
+         │          / train_agpt20b_yarn.sh
+         │        / (3-arg positional)
+         │      / (simple)
+    Low  │    /
+         └──────────────────────
+          Easy    Difficult
+          Learning Curve
+
+
+MENTAL MODEL
+================================================================================
+
+train_agpt20b_yarn.sh:
+
+  ┌─────────────────────────────────────┐
+  │  🎯 YaRN Wrapper                    │
+  │  └─ Takes 3 args                    │
+  │     └─ Validates                    │
+  │        └─ Sets up env               │
+  │           └─ Calls run_train...sh   │
+  │              └─ Which does real work│
+  └─────────────────────────────────────┘
+
+run_train_torchtitan.sh:
+
+  ┌──────────────────────────────────────┐
+  │  🛠️  Universal TorchTitan Launcher   │
+  │  └─ Takes mode + flags + envs       │
+  │     └─ Merges defaults              │
+  │        └─ Builds full command       │
+  │           └─ Calls run_train.sh     │
+  │              └─ Which does real work│
+  └──────────────────────────────────────┘
+
+
+RESPONSIBILITY DIAGRAM
+================================================================================
+
+train_agpt20b_yarn.sh handles:
+  ✓ Parse positional arguments
+  ✓ YaRN-specific validation
+  ✓ Path resolution for agpt-20b
+  ✓ Environment setup for YaRN
+  ✓ Determine single/multi mode
+  ✗ Everything else → delegates
+
+run_train_torchtitan.sh handles:
+  ✓ Parse mode and flags
+  ✓ Merge environment variables
+  ✓ Validate paths and dependencies
+  ✓ Build TorchTitan command
+  ✓ Optional: resource monitoring wrapper
+  ✗ MPI/PBS orchestration → delegates
+
+
+TIMELINE: From User Input to Training
+================================================================================
+
+train_agpt20b_yarn.sh:
+  Time  Action
+  ────────────────────────────────────
+  0ms   User types: ./train_agpt20b_yarn.sh 16384 400 8
+  1ms   Parse 3 args
+  5ms   Validate paths (DCP, safetensors, YaRN config)
+  10ms  Set 7 environment variables
+  15ms  Determine single/multi mode
+  20ms  Display config
+  25ms  Execute: ./run_train_torchtitan.sh multi
+        ↓
+        (continues in run_train_torchtitan.sh)
+
+run_train_torchtitan.sh:
+  Time  Action
+  ────────────────────────────────────
+  0ms   User has already exported 6+ env vars
+  1ms   Script starts
+  5ms   Parse mode + flags
+  15ms  Merge 20+ env vars with defaults
+  30ms  Validate paths and dependencies
+  40ms  Build TRAIN_CMD array (20+ arguments)
+  50ms  Display full configuration
+  60ms  Execute: ./run_train.sh multi hostfile -- ...
+        ↓
+        (continues in run_train.sh)
+
+
+COMPARISON AT A GLANCE (VISUAL)
+================================================================================
+
+If you want:                         Use:
+─────────────────────────────────────────────
+"Just train agpt-20b"               train_agpt20b_yarn.sh
+                                    (⭐ SIMPLE)
+                                    
+"Train agpt-20b, but customize"     run_train_torchtitan.sh
+                                    (slightly complex)
+                                    
+"Train a different model"           run_train_torchtitan.sh
+                                    (⭐ REQUIRED)
+                                    
+"I need resource monitoring"        run_train_torchtitan.sh
+                                    (⭐ REQUIRED)
+                                    
+"I want a one-command solution"     train_agpt20b_yarn.sh
+                                    (⭐ ONLY OPTION)
+                                    
+"I need full transparency"          run_train_torchtitan.sh
+                                    (⭐ REQUIRED)
+                                    
+"I'm a beginner"                    train_agpt20b_yarn.sh
+                                    (⭐ RECOMMENDED)
+                                    
+"I'm an ML engineer"                run_train_torchtitan.sh
+                                    (⭐ STANDARD)
+
+
+SUMMARY VISUAL
+================================================================================
+
+                    Simplicity vs Features
+
+         High Simplicity (Beginner-friendly)
+                        │
+                  train_agpt20b_yarn.sh  ←── One job, does it well
+                    • 3 arguments          
+                    • Pre-validated        
+                    • Limited config       
+                        │
+                        │ (learning gap)
+                        │
+         run_train_torchtitan.sh  ←── Full-featured, all models
+                    • 20+ variables
+                    • Everything configurable
+                    • Supports all models
+                        │
+                  High Flexibility (Expert-friendly)
+
+
+================================================================================
+                    See SCRIPT_COMPARISON.md for details
+================================================================================

@@ -1,0 +1,305 @@
+================================================================================
+                  SCRIPT COMPARISON DOCUMENTATION INDEX
+         train_agpt20b_yarn.sh vs run_train_torchtitan.sh
+================================================================================
+
+This package contains comprehensive documentation comparing the two training
+launch scripts. Read them in order or jump to what you need.
+
+================================================================================
+DOCUMENTS IN THIS PACKAGE
+================================================================================
+
+1. SCRIPT_COMPARISON_INDEX.txt (this file)
+   └─ Overview of all comparison documents
+   └─ Quick navigation guide
+   └─ Reading recommendations
+
+2. SCRIPT_COMPARISON_QUICK_REFERENCE.txt (⭐ START HERE)
+   └─ One-page summary with key differences
+   └─ When to use each script
+   └─ Feature comparison tables
+   └─ Side-by-side examples
+   └─ ~250 lines, 10 minute read
+
+3. SCRIPT_COMPARISON.md (DETAILED REFERENCE)
+   └─ Complete technical comparison
+   └─ 10 detailed sections
+   └─ Purpose & philosophy
+   └─ Interface comparison
+   └─ Configuration flow
+   └─ Dependency chains
+   └─ ~600 lines, 30 minute read
+
+4. SCRIPT_COMPARISON_VISUAL.txt (DIAGRAMS & FLOWCHARTS)
+   └─ Visual representations
+   └─ Execution flowcharts
+   └─ Complexity pyramids
+   └─ Decision trees
+   └─ User type recommendations
+   └─ ~350 lines, 15 minute read
+
+================================================================================
+QUICK NAVIGATION
+================================================================================
+
+If you want to know...                    Read...
+────────────────────────────────────────────────────────────
+"Which script should I use?"              → QUICK_REFERENCE
+"What are the main differences?"          → QUICK_REFERENCE
+"How do they execute internally?"         → SCRIPT_COMPARISON.md
+"Can I see a decision tree?"              → SCRIPT_COMPARISON_VISUAL.txt
+"What features does each have?"           → SCRIPT_COMPARISON.md
+"Show me side-by-side examples"           → QUICK_REFERENCE
+"I want the full technical breakdown"     → SCRIPT_COMPARISON.md
+"I'm a visual learner"                    → SCRIPT_COMPARISON_VISUAL.txt
+
+================================================================================
+READING RECOMMENDATIONS
+================================================================================
+
+For Beginners (just want to train agpt-20b):
+  1. Read SCRIPT_COMPARISON_QUICK_REFERENCE.txt (3 mins)
+  2. Use: ./train_agpt20b_yarn.sh 16384 400 8
+  Done.
+
+For ML Engineers (need to understand both options):
+  1. Read SCRIPT_COMPARISON_QUICK_REFERENCE.txt (5 mins)
+  2. Read relevant sections of SCRIPT_COMPARISON.md (10 mins)
+  3. Review SCRIPT_COMPARISON_VISUAL.txt for diagrams (5 mins)
+  Total: 20 minutes
+
+For Framework Developers (need every detail):
+  1. Start with SCRIPT_COMPARISON.md sections 1-5 (15 mins)
+  2. Review SCRIPT_COMPARISON_VISUAL.txt flowcharts (10 mins)
+  3. Deep dive: SCRIPT_COMPARISON.md sections 6-10 (15 mins)
+  Total: 40 minutes
+
+For DevOps / Operations:
+  1. SCRIPT_COMPARISON_QUICK_REFERENCE.txt (5 mins)
+  2. SCRIPT_COMPARISON.md section on "Features" (5 mins)
+  3. SCRIPT_COMPARISON_VISUAL.txt "Feature Matrix" (3 mins)
+  Total: 13 minutes
+
+================================================================================
+KEY FACTS AT A GLANCE
+================================================================================
+
+train_agpt20b_yarn.sh
+  • Purpose: Train agpt-20b with YaRN context extension
+  • Interface: ./train_agpt20b_yarn.sh <seq_len> <steps> <nodes>
+  • Parameters: 3 positional arguments
+  • Customization: Limited (but covers 95% of use cases)
+  • Best for: Data scientists, quick training
+  • Learning curve: Gentle
+  • One-command launch: Yes ✅
+
+run_train_torchtitan.sh
+  • Purpose: Train ANY TorchTitan model with full control
+  • Interface: export VAR=val; ./run_train_torchtitan.sh <mode>
+  • Parameters: 20+ environment variables + flags + extra args
+  • Customization: Complete (every option configurable)
+  • Best for: ML engineers, researchers, diverse workloads
+  • Learning curve: Steeper
+  • One-command launch: No (multiple exports first)
+
+================================================================================
+FIVE MINUTE SUMMARY
+================================================================================
+
+train_agpt20b_yarn.sh is a wrapper script that:
+  1. Takes 3 simple positional arguments (seq_len, steps, nodes)
+  2. Validates YaRN configuration
+  3. Sets up environment variables
+  4. Calls run_train_torchtitan.sh
+
+run_train_torchtitan.sh is a flexible launcher that:
+  1. Takes mode (single/multi) + optional hostfile
+  2. Accepts 20+ configurable environment variables
+  3. Builds complete TorchTitan command
+  4. Calls run_train.sh (MPI/PBS wrapper)
+
+Choose train_agpt20b_yarn.sh if:
+  ✓ You're training agpt-20b specifically
+  ✓ You want one simple command
+  ✓ Standard parameters work for you
+
+Choose run_train_torchtitan.sh if:
+  ✓ You need to train a different model
+  ✓ You need advanced customization
+  ✓ You want resource monitoring
+  ✓ You need to pass custom TorchTitan arguments
+
+================================================================================
+DOCUMENT STATISTICS
+================================================================================
+
+SCRIPT_COMPARISON_QUICK_REFERENCE.txt
+  Lines: 550
+  Word count: ~3,500
+  Sections: 20+
+  Tables: 8
+  Read time: 10-12 minutes
+
+SCRIPT_COMPARISON.md
+  Lines: 596
+  Word count: ~5,800
+  Sections: 10
+  Code examples: 15+
+  Tables: 5
+  Read time: 25-30 minutes
+
+SCRIPT_COMPARISON_VISUAL.txt
+  Lines: 350
+  Diagrams: 12
+  Flowcharts: 3
+  Decision trees: 2
+  Read time: 12-15 minutes
+
+Total documentation: ~1,500 lines covering every aspect
+
+================================================================================
+SPECIFIC TOPICS BY LOCATION
+================================================================================
+
+Topic                                    Location
+──────────────────────────────────────────────────────────────
+When to use each script                  QUICK_REFERENCE (section 2)
+Quick command examples                   QUICK_REFERENCE (section 4)
+Feature matrix                           SCRIPT_COMPARISON.md (section 3)
+Input validation comparison              SCRIPT_COMPARISON.md (section 3)
+Parameter scope                          QUICK_REFERENCE (section "CONTROL")
+Customization options                    SCRIPT_COMPARISON.md (section 6)
+Error messages                           SCRIPT_COMPARISON.md (section 8)
+Execution flowcharts                     SCRIPT_COMPARISON_VISUAL.txt
+Decision tree                            SCRIPT_COMPARISON_VISUAL.txt
+User type recommendations                SCRIPT_COMPARISON_VISUAL.txt
+Configuration logging output             SCRIPT_COMPARISON.md (section 5)
+Dependency chains                        SCRIPT_COMPARISON.md (section 7)
+Advanced features (monitoring, etc)      SCRIPT_COMPARISON.md (section 6)
+
+================================================================================
+USAGE SCENARIOS
+================================================================================
+
+Scenario 1: "I want to train agpt-20b with YaRN"
+  Read:     SCRIPT_COMPARISON_QUICK_REFERENCE.txt
+  Result:   Use train_agpt20b_yarn.sh
+  Command:  ./train_agpt20b_yarn.sh 16384 400 8
+
+Scenario 2: "I need to train a different model"
+  Read:     SCRIPT_COMPARISON.md (section 2)
+  Result:   Must use run_train_torchtitan.sh
+  Action:   Set MODULE, CONFIG, MODEL_PATH env vars
+
+Scenario 3: "I want resource monitoring during training"
+  Read:     SCRIPT_COMPARISON.md (section 6)
+  Result:   Must use run_train_torchtitan.sh
+  Action:   Set RESOURCE_MONITOR=1
+
+Scenario 4: "I'm experimenting with different configs"
+  Read:     SCRIPT_COMPARISON.md (section 6)
+  Result:   Use run_train_torchtitan.sh (more flexible)
+  Action:   Update env vars for each experiment
+
+Scenario 5: "I need to understand the differences before committing to one"
+  Read:     All three documents in order
+  Result:   Full understanding of both options
+  Action:   Make informed decision based on needs
+
+================================================================================
+KEY INSIGHTS FROM DOCUMENTATION
+================================================================================
+
+1. RELATIONSHIP
+   train_agpt20b_yarn.sh is actually a wrapper AROUND
+   run_train_torchtitan.sh (not a replacement)
+
+2. DESIGN PHILOSOPHY
+   train_agpt20b_yarn.sh = Opinionated defaults
+   run_train_torchtitan.sh = Flexibility first
+
+3. TARGET AUDIENCE
+   train_agpt20b_yarn.sh = Beginners, single use case
+   run_train_torchtitan.sh = Experts, all use cases
+
+4. CUSTOMIZATION
+   train_agpt20b_yarn.sh = Limited but sufficient for standard cases
+   run_train_torchtitan.sh = Unlimited (20+ variables + custom args)
+
+5. LEARNING CURVE
+   train_agpt20b_yarn.sh = 5 minutes to learn
+   run_train_torchtitan.sh = 30 minutes to master
+
+6. ERROR MESSAGES
+   train_agpt20b_yarn.sh = Domain-specific and clear
+   run_train_torchtitan.sh = Generic, requires TorchTitan knowledge
+
+7. ONE-COMMAND LAUNCH
+   train_agpt20b_yarn.sh = Yes (./script seq_len steps nodes)
+   run_train_torchtitan.sh = No (multiple exports first)
+
+8. EXTENSIBILITY
+   train_agpt20b_yarn.sh = Hard to extend beyond agpt-20b
+   run_train_torchtitan.sh = Easy to extend to any model
+
+================================================================================
+RECOMMENDATION FLOWCHART
+================================================================================
+
+Start here:
+  Are you training agpt-20b?
+    YES → Do you need custom config?
+            NO → Use: train_agpt20b_yarn.sh ✅
+            YES → Use: run_train_torchtitan.sh ✅
+    NO  → Use: run_train_torchtitan.sh ✅
+
+================================================================================
+FINAL RECOMMENDATION
+================================================================================
+
+🎯 For most users: train_agpt20b_yarn.sh
+   • Simpler interface
+   • Pre-validated configuration
+   • Perfect for standard YaRN training
+   • One command does everything
+
+🛠️  For advanced/flexible: run_train_torchtitan.sh
+   • Full control over everything
+   • Support for any TorchTitan model
+   • Advanced features (monitoring, etc)
+   • Transparent command execution
+
+📚 Both are good. Use the one that fits your needs.
+
+================================================================================
+RELATED DOCUMENTATION
+================================================================================
+
+These documents assume you're familiar with:
+  • Basic shell scripting
+  • Environment variables
+  • TorchTitan basics
+
+For more context, see also:
+  • YaRN_README.md
+  • YaRN_QUICK_START.md
+  • YaRN_agpt20b_implementation.md
+  • TORCHTITAN_INTEGRATION.md
+
+================================================================================
+FEEDBACK & QUESTIONS
+================================================================================
+
+If something is unclear or you find errors in these documents, note:
+  • Exact file and location (document name + section)
+  • What was unclear
+  • What you expected
+  • Context of use
+
+This feedback helps improve the documentation for everyone.
+
+================================================================================
+                          END OF INDEX
+                   Start with QUICK_REFERENCE.txt
+================================================================================

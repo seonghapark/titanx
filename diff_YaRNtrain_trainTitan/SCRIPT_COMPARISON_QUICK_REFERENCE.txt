@@ -1,0 +1,365 @@
+================================================================================
+                    QUICK REFERENCE: Script Comparison
+         train_agpt20b_yarn.sh vs run_train_torchtitan.sh
+================================================================================
+
+WHAT EACH SCRIPT DOES
+================================================================================
+
+train_agpt20b_yarn.sh (107 lines)
+  └─ Opinionated wrapper for agpt-20b YaRN training
+     • Hardcodes model, module, config
+     • Takes 3 positional args: seq_len, training_steps, num_nodes
+     • Pre-validates YaRN config
+     • Delegates to run_train_torchtitan.sh
+
+run_train_torchtitan.sh (314 lines)
+  └─ Universal TorchTitan launcher for ANY model
+     • Flexible configuration via environment variables
+     • Takes mode (single|multi) + optional hostfile + flags
+     • Builds full TorchTitan command with all options
+     • Delegates to run_train.sh (MPI/PBS wrapper)
+
+
+ONE-LINE SUMMARY
+================================================================================
+
+train_agpt20b_yarn.sh  = Simple button: "Train agpt-20b with YaRN"
+run_train_torchtitan.sh = Full control panel for TorchTitan
+
+
+QUICK COMPARISON
+================================================================================
+
+INTERFACE
+
+train_agpt20b_yarn.sh:
+  $ ./train_agpt20b_yarn.sh 16384 400 8
+
+  Args: SEQ_LEN TRAINING_STEPS NUM_NODES (positional)
+
+run_train_torchtitan.sh:
+  $ export MODULE=agpt CONFIG=agpt_20b_yarn MODEL_PATH=...
+  $ ./run_train_torchtitan.sh multi /hostfile
+
+  Args: MODE [HOSTFILE] [FLAGS] [-- EXTRA_ARGS]
+        Environment variables configure everything
+
+
+WHAT YOU CONTROL
+================================================================================
+
+train_agpt20b_yarn.sh — Limited
+  ✓ Can change: seq_len, training_steps, num_nodes
+  ✓ Can override: CKPT, DATASET_NAME, TP/PP/CP
+  ✗ Cannot change: model, module, config, paths
+  ✗ No resource monitoring or dry-run
+
+run_train_torchtitan.sh — Full control
+  ✓ Can change: module, config, model, dataset, all hyperparams
+  ✓ Can enable: resource monitoring, loss std termination, dry-run
+  ✓ Can pass: unlimited extra TorchTitan arguments
+  ✓ Can customize: logging, checkpointing, all 20+ variables
+
+
+WHEN TO USE EACH
+================================================================================
+
+USE train_agpt20b_yarn.sh IF:
+
+  ✓ Training agpt-20b with YaRN (specifically)
+  ✓ Want the simplest command possible
+  ✓ Not comfortable with shell scripting
+  ✓ Running standard training (seq_len, steps, nodes)
+  ✓ Want clear, YaRN-specific error messages
+  ✓ New to ML/training, prefer opinionated defaults
+
+EXAMPLE USERS:
+  • Data scientist extending context length
+  • Student learning YaRN
+  • Practitioner running standard workload
+
+
+USE run_train_torchtitan.sh IF:
+
+  ✓ Training any TorchTitan model (not just agpt-20b)
+  ✓ Need fine-grained control over options
+  ✓ Want resource monitoring or advanced features
+  ✓ Experimenting with different configurations
+  ✓ Need custom TorchTitan arguments
+  ✓ Running unusual/complex training setups
+
+EXAMPLE USERS:
+  • ML engineer optimizing training
+  • Framework developer
+  • Researcher comparing configs
+  • DevOps managing diverse workloads
+
+
+SIDE-BY-SIDE EXAMPLE
+================================================================================
+
+TASK: Train agpt-20b with YaRN, 16K length, 400 steps, 8 nodes
+
+train_agpt20b_yarn.sh:
+  $ ./train_agpt20b_yarn.sh 16384 400 8
+
+  One command. Done.
+
+run_train_torchtitan.sh:
+  $ export MODULE=agpt
+  $ export CONFIG=agpt_20b_yarn
+  $ export MODEL_PATH=/lus/flare/projects/datascience/seonghapark/agpt-20b-v2-512n-step-4000-safetensors
+  $ export CKPT=/path/to/step-4000
+  $ export SEQ_LEN=16384
+  $ export TRAINING_STEPS=400
+  $ ./run_train_torchtitan.sh multi /path/to/hostfile
+
+  Six setup commands + one launch command.
+
+
+ANOTHER EXAMPLE
+================================================================================
+
+TASK: Train agpt-20b with custom dataset, 32K, skip steps 50-100
+
+train_agpt20b_yarn.sh:
+  $ # Can't do this without editing the script
+  $ # Too rigid for custom setups
+
+run_train_torchtitan.sh:
+  $ export MODULE=agpt
+  $ export CONFIG=agpt_20b_yarn
+  $ export MODEL_PATH=...
+  $ export CKPT=/path/to/step-4000
+  $ export SEQ_LEN=32768
+  $ export TRAINING_STEPS=400
+  $ export DATASET_NAME=my_custom_dataset
+  $ export DATASET_PATH=/path/to/data
+  $ ./run_train_torchtitan.sh multi /hostfile -- \
+      --dataloader.resume_from_checkpoint /path/to/step-50
+
+  Full control. Can do anything.
+
+
+FEATURES COMPARISON
+================================================================================
+
+Feature                          train_agpt20b  run_torchtitan
+─────────────────────────────────────────────────────────────
+Simple 1-command launch          ✅ Yes          ⚠️  Multiple
+Support agpt-20b YaRN            ✅ Yes          ✅ Yes
+Support other models             ❌ No           ✅ Yes
+Pre-launch validation            ✅ Yes          ⚠️  Basic
+Resource monitoring              ❌ No           ✅ Yes
+Loss-based early termination     ❌ No           ✅ Yes
+Dry-run mode                     ❌ No           ✅ Yes
+Pass custom TorchTitan args      ❌ No           ✅ Yes
+Clear error messages             ✅ Yes          ⚠️  Generic
+Configuration transparency       ⚠️  Simple       ✅ Complete
+Learning curve                   ✅ Gentle       ⚠️  Steep
+Fast to launch                   ✅ ~1 min       ⚠️  ~5 min
+
+
+CONFIGURATION COMPARISON
+================================================================================
+
+train_agpt20b_yarn.sh — Hardcoded:
+  MODEL_NAME            = "agpt-20b-v2-512n-step-4000"
+  SAFETENSORS_PATH      = Fixed path
+  MODULE                = "agpt"
+  CONFIG                = "agpt_20b_yarn"
+  ACTIVATION_CHECKPOINT = "none"
+  Dataset               = "pg19_multinews" (overridable)
+  DCP path              = Default (overridable via CKPT)
+
+run_train_torchtitan.sh — All configurable:
+  MODEL                 = Env var (required)
+  MODULE                = Env var (default: llama3)
+  CONFIG                = Env var (default: llama3_debugmodel)
+  DATASET_NAME          = Env var (default: pg19_multinews)
+  DATASET_PATH          = Env var (optional)
+  HF_ASSETS_PATH        = Env var (default: MODEL)
+  TRAINING_STEPS        = Env var (default: 100)
+  SEQ_LEN               = Env var (default: 16384)
+  LOG_DIR               = Env var (auto-generated)
+  CKPT_FOLDER           = Env var (default: checkpoint)
+  TORCHTITAN_ROOT       = Env var (default: ./torchtitan_repo)
+  TRAIN_PYTHON_BIN      = Env var (auto-detected)
+  RESOURCE_MONITOR      = Env var (default: 0)
+  ... and 8 more resource monitoring variables
+
+
+ERROR MESSAGE STYLE
+================================================================================
+
+train_agpt20b_yarn.sh:
+  Error: YaRN rope_scaling not found in config.json
+  Please run: python3 yarn_validation_agpt20b.py
+
+  → Clear, actionable, domain-specific
+
+run_train_torchtitan.sh:
+  error: MODEL path not found: /path/to/model
+         e.g. MODEL=${TORCHTITAN_ROOT}/tests/assets/tokenizer
+
+  → Generic, requires understanding TorchTitan
+
+
+DEPENDENCY CHAIN
+================================================================================
+
+train_agpt20b_yarn.sh:
+  train_agpt20b_yarn.sh
+    ↓ (sets MODULE, CONFIG, MODEL_PATH, CKPT)
+  run_train_torchtitan.sh
+    ↓ (builds full TorchTitan command)
+  run_train.sh
+    ↓ (MPI/PBS setup)
+  titan_train.py
+    ↓ (TorchTitan execution)
+
+run_train_torchtitan.sh:
+  run_train_torchtitan.sh
+    ↓ (builds full TorchTitan command)
+  run_train.sh
+    ↓ (MPI/PBS setup)
+  titan_train.py
+    ↓ (TorchTitan execution)
+
+
+HIDDEN ASSUMPTIONS
+================================================================================
+
+train_agpt20b_yarn.sh assumes:
+  • You're training agpt-20b specifically
+  • You want CONFIG=agpt_20b_yarn
+  • You want MODULE=agpt
+  • You want pg19_multinews dataset (unless overridden)
+  • You're running from xpu_launcher/xpu_torchtitan/
+  • You have DCP checkpoint at standard path (unless CKPT set)
+  • You want activation_checkpoint="none"
+
+run_train_torchtitan.sh assumes:
+  • You know what MODULE/CONFIG you want
+  • You know how to set environment variables
+  • You're comfortable with TorchTitan arguments
+  • You may customize everything
+
+
+FOR BEGINNERS
+================================================================================
+
+Start here:
+  $ ./train_agpt20b_yarn.sh 16384 400 8
+
+This is beginner-friendly because:
+  • Simple command
+  • Pre-validated configuration
+  • Clear error messages
+  • Sane defaults for YaRN training
+
+
+FOR ADVANCED USERS
+================================================================================
+
+Use run_train_torchtitan.sh when you need:
+  • Different model
+  • Custom dataset
+  • Resource monitoring
+  • Early termination
+  • Custom TorchTitan flags
+  • Dry-run to inspect commands
+
+
+RELATIONSHIP
+================================================================================
+
+train_agpt20b_yarn.sh is a WRAPPER around run_train_torchtitan.sh
+
+  User
+   ↓
+   train_agpt20b_yarn.sh
+     ├─ Validates YaRN config
+     ├─ Sets up environment
+     └─ Calls: ./run_train_torchtitan.sh multi
+        ↓
+        run_train_torchtitan.sh
+          ├─ Merges environment with defaults
+          ├─ Builds TorchTitan command
+          └─ Calls: ./run_train.sh multi hostfile -- ...
+             ↓
+             run_train.sh
+               ├─ MPI/PBS setup
+               ├─ Node allocation
+               └─ Executes: python titan_train.py ...
+
+
+KEY DIFFERENCES AT A GLANCE
+================================================================================
+
+                          train_agpt20b  run_torchtitan
+────────────────────────────────────────────────────────
+Purpose                  YaRN wrapper   Universal launcher
+Lines of code            107            314
+Supported models         1              All TorchTitan
+Env variables            3-5            20+
+Customization            Low            High
+Learning curve           Gentle         Steep
+Error messages           Domain-specific Generic
+Best for                 agpt-20b       Anything
+Flexibility              ⭐⭐            ⭐⭐⭐⭐⭐
+Simplicity               ⭐⭐⭐⭐⭐       ⭐⭐
+
+
+RECOMMENDATION
+================================================================================
+
+👤 "I want to train agpt-20b with YaRN"
+   → Use: train_agpt20b_yarn.sh
+      Command: ./train_agpt20b_yarn.sh 16384 400 8
+
+👤 "I want to train agpt-20b but with custom options"
+   → Use: run_train_torchtitan.sh
+      Set environment variables, adjust as needed
+
+👤 "I want to train a different model"
+   → Use: run_train_torchtitan.sh
+      Set MODULE, CONFIG, MODEL_PATH appropriately
+
+👤 "I want fine control over everything"
+   → Use: run_train_torchtitan.sh
+      Set all variables, pass custom args
+
+👤 "I'm new to ML training"
+   → Start with: train_agpt20b_yarn.sh
+      Graduate to: run_train_torchtitan.sh
+
+
+FOR MORE DETAILS
+================================================================================
+
+See: SCRIPT_COMPARISON.md
+
+For detailed breakdown of:
+  • Purpose & design philosophy
+  • Input validation strategies
+  • Configuration & execution flow
+  • Extensibility & customization options
+  • Practical examples
+  • Troubleshooting approaches
+  • Complete feature comparison tables
+
+================================================================================
+                             SUMMARY
+================================================================================
+
+train_agpt20b_yarn.sh   = "Just train agpt-20b with YaRN"
+run_train_torchtitan.sh = "Control everything about TorchTitan training"
+
+Use the simpler one if it does what you need.
+Use the powerful one if you need more.
+
+Both are good. They serve different purposes.
+
+================================================================================
