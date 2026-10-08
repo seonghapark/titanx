@@ -231,8 +231,6 @@ Model Path:               $HOME/models/agpt-20b
 Log Directory:            outputs/agpt_20b_20261007_123456
 Checkpoint Directory:     agpt-20b-sophiag-olmo-mix-1124-n32-gbs768
 ==========================================
-[DRY-RUN] Would execute:
-run_train_torchtitan.sh multi hosts.txt --dry-run -- --training.steps 2970456 ...
 ```
 
 ## Advanced: Manual Parameter Calculation
@@ -244,35 +242,6 @@ For maximum control, use the calculator directly:
 ./calculate_agpt_params.sh --model 80b --nnodes 64 --dry-run
 ```
 
-Output:
-```
-==========================================
-AGPT Parameter Calculation Results
-==========================================
-
-Model Configuration:
-  Model:                  80b
-  Number of Nodes:        64
-  Total GPUs:             768
-
-Parallelism:
-  Tensor Parallelism:     2          # 80B requires TP=2
-  Pipeline Parallelism:   1
-  Context Parallelism:    1
-
-Batch Size:
-  Local Batch Size:       1          # 80B uses LBS=1
-  Gradient Accumulation:  1
-  Global Batch Size:      384
-
-Training:
-  Sequence Length:        8192
-  Training Steps:         2970456
-  Total Tokens:           4673780159710
-
-...
-```
-
 ### JSON Output
 
 For integration with scripts or tools:
@@ -281,46 +250,7 @@ For integration with scripts or tools:
 ./calculate_agpt_params.sh --model 2b --nnodes 8 --output json
 ```
 
-Output:
-```json
-{
-  "model": "2b",
-  "nnodes": 8,
-  "ngpus": 96,
-  "parallelism": {
-    "tp": 1,
-    "pp": 1,
-    "cp": 1
-  },
-  "batch": {
-    "lbs": 2,
-    "gas": 1,
-    "gbs": 192
-  },
-  "training": {
-    "seq_len": 8192,
-    "steps": 2970456,
-    "tokens": 4673780159710
-  },
-  ...
-}
-```
-
 ## PBS Job Submission
-
-### Simple Interactive Launch
-
-Run on already-allocated nodes:
-
-```bash
-# Get an allocation
-qsub -I -l select=8 -l walltime=06:00:00
-
-# Inside compute node
-cd $PBS_O_WORKDIR
-./run_train_agpt.sh --model 2b multi
-# Auto-detects PBS_NODEFILE → NNODES=8
-```
 
 ### Batch Job Submission
 
@@ -374,12 +304,6 @@ Outside a PBS job, you must specify node count:
 ./run_train_agpt.sh --model 2b --nnodes 8 multi /path/to/hosts.txt
 ```
 
-Or run inside a PBS allocation:
-```bash
-qsub -I -l select=8
-./run_train_agpt.sh --model 2b multi  # Auto-detects PBS_NODEFILE
-```
-
 ### Error: "TP×PP×CP exceeds total GPUs"
 
 Your parallelism settings don't fit in available GPUs:
@@ -408,61 +332,6 @@ This happens on single node or very small clusters. Consider:
 # Better: Use gradient accumulation
 ./run_train_agpt.sh --model 2b single --gas 2
 # GBS = 12×2×2 = 48 (accumulate 2 steps before update)
-```
-
-## Integration with run_train_torchtitan.sh
-
-The wrapper calls `run_train_torchtitan.sh` under the hood. You can pass extra TorchTitan arguments:
-
-```bash
-./run_train_agpt.sh --model 2b single -- \
-  --training.enable_loss_std_termination \
-  --checkpoint.interval=50
-```
-
-These are passed through directly to the underlying training script.
-
-## Validation and Testing
-
-### Validate Calculations
-
-```bash
-# Check GBS calculation for 2B on different scales
-for n in 1 8 64 512; do
-  echo "=== 2B on $n nodes ==="
-  eval $(./calculate_agpt_params.sh --model 2b --nnodes $n)
-  echo "GBS=$AGPT_GBS, STEPS=$AGPT_TRAINING_STEPS"
-done
-```
-
-Expected output:
-```
-=== 2B on 1 nodes ===
-GBS=24, STEPS=23627755
-
-=== 2B on 8 nodes ===
-GBS=192, STEPS=2957219
-
-=== 2B on 64 nodes ===
-GBS=1536, STEPS=369652
-
-=== 2B on 512 nodes ===
-GBS=12288, STEPS=46206
-```
-
-**Key observation:** GBS increases linearly with nodes, but TRAINING_STEPS decreases proportionally, keeping token consumption constant.
-
-### Model-Specific Validation
-
-```bash
-# Verify 80B uses TP=2, LBS=1 (not TP=1, LBS=2 like 2B)
-./calculate_agpt_params.sh --model 80b --nnodes 8 --dry-run | grep -E "Tensor|Local"
-```
-
-Expected:
-```
-Tensor Parallelism:     2
-Local Batch Size:       1
 ```
 
 ## Reference: Parameter Defaults
