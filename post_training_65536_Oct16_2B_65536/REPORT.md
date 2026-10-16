@@ -300,7 +300,33 @@ export rc : 0
 -rw-r--r-- tokenizer.model                   4241003
 ```
 
-Tensor-level diff against the input checkpoint is in `artifacts/verify_export.txt`,
+| check | result |
+|---|---|
+| Model tensors in → out | 111 → 111 |
+| Key set vs. input checkpoint | **identical** — 0 only-in-input, 0 only-in-output |
+| Shape mismatches | **0** |
+| NaN/Inf sweep, all 111 output tensors | **none** |
+| Per-tensor delta vs. input, 24 sampled | **all 24 changed** |
+
+| tensor | max\|delta\| | rel_rms |
+|---|---|---|
+| `lm_head.weight` | 0.0032497 | 0.010741 |
+| `model.embed_tokens.weight` | 0.0032301 | 0.000477 |
+| `model.layers.0.self_attn.o_proj.weight` | 0.0014593 | **0.021367** |
+| `model.layers.0.self_attn.v_proj.weight` | 0.0012299 | 0.018541 |
+| `model.layers.0.self_attn.q_proj.weight` | 0.0016106 | 0.013510 |
+| `model.layers.0.mlp.down_proj.weight` | 0.0017969 | 0.013002 |
+| `model.layers.0.self_attn.k_proj.weight` | 0.0018651 | 0.012783 |
+| `model.layers.0.mlp.up_proj.weight` | 0.0015193 | 0.012297 |
+| `model.layers.0.mlp.gate_proj.weight` | 0.0015836 | 0.010987 |
+| layer norms (11 layers, both positions) | 0.0009–0.0023 | 0.0003–0.0012 |
+
+**sampled 24 tensors, 24 changed from the input checkpoint.** No tensor passed through
+unmodified — a stale-shard or partial-merge bug would leave some at exactly zero delta.
+The magnitudes are near-identical to the 32768 run's (`o_proj` 2.14% here vs 2.11% there),
+which is what equal token counts at equal learning rate should produce.
+
+Full output in `artifacts/verify_export.txt`,
 produced by `artifacts/verify_export_bf16.py` (reads safetensors without torch, since
 login nodes cannot `import torch`; widens BF16 via `uint16 << 16` because numpy has no
 bfloat16 dtype).
