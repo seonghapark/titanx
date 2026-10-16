@@ -161,6 +161,17 @@ CKPT_LOAD_DIR=""   # weights come from HF assets, not a DCP checkpoint
 echo
 echo "=== launching at $(date) ==="
 
+# NOTE ON THE LAUNCH BELOW
+#  1. The resource flags MUST be on the command line, not only as env vars.
+#     run_train_agpt.sh:42-44 does RESOURCE_MONITOR="" unconditionally at
+#     startup, clobbering an inherited value; only --resource-* survives. Job
+#     8935820 exported RESOURCE_MONITOR=1, logged "Resource Monitor = 0", and
+#     collected zero samples.
+#  2. Do NOT put a comment between the `VAR=value \` lines and the command.
+#     A comment terminates the assignment list, so every one of those vars is
+#     silently dropped from the command's environment. Verified: a comment
+#     spliced there made MODEL/CONFIG/DATASET_PATH all vanish.
+
 # Budget: measured 2.65 s/step at seq_len 16384 (job 8917595) -> 400 steps is
 # ~18 min, plus ~6 min model load + Inductor compile. 2700s leaves >25 min of
 # headroom inside the 1h allocation for the export step and the report.
@@ -179,11 +190,6 @@ LOSS_STD_THRESHOLD=0.001 \
 LOSS_STD_WINDOW=50 \
 CKPT_INTERVAL=$CKPT_INTERVAL \
 CKPT_KEEP_LATEST_K=0 \
-# The resource flags MUST be passed on the command line, not only as env vars.
-# run_train_agpt.sh:42-44 does RESOURCE_MONITOR="" unconditionally at startup,
-# which clobbers an inherited value; only the --resource-* flags survive. Job
-# 8935820 exported RESOURCE_MONITOR=1 and still logged "Resource Monitor = 0"
-# and collected zero samples.
 timeout 2700 ./run_train_agpt.sh --model 2b --tp $TP --pp $PP --cp $CP --lbs $LBS multi \
   --resource-monitor \
   --resource-interval $RESOURCE_INTERVAL \
