@@ -1,0 +1,19 @@
+{
+  "accelerator_energy_joules_estimate": 0.0,
+  "averages": {
+    "cpu_percent": 5.833,
+    "memory_used_bytes": 203113026136.276,
+    "memory_used_percent": 16.676
+  },
+  "backend": "xpu",
+  "elapsed_seconds": 1737.418,
+  "ended_at": "2026-10-16T19:52:33.771897+00:00",
+  "hostname": "x4602c5s7b0n0",
+  "maxima": {
+    "cpu_percent": 7.309,
+    "memory_used_bytes": 216852639744.0,
+    "memory_used_percent": 17.804
+  },
+  "samples": 116,
+  "started_at": "2026-10-16T19:23:36.353947+00:00"
+}
