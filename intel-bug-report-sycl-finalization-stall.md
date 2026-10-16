@@ -82,6 +82,29 @@ Thread 1 "python" received signal SIGSEGV, Segmentation fault.
 #11 0x000055c0abee86c7 in _start ()
 ```
 
+A core dump from the earlier job 8924552 gives the same stack with the free
+path expanded, showing the fault is a **heap-consistency failure inside
+`free()`**, not a bad pointer at the call site — and with a *different*
+kernel library at the `descriptor_unreg` frame:
+
+```
+#1  sbrk ()                        from /lib64/libc.so.6
+#2  __default_morecore@GLIBC_2.2.5 from /lib64/libc.so.6
+#3  systrim.constprop ()           from /lib64/libc.so.6
+#4  _int_free ()                   from /lib64/libc.so.6
+#5  free ()                        from /lib64/libc.so.6
+#6  sycl::_V1::detail::CompressedRTDeviceBinaryImage::~CompressedRTDeviceBinaryImage()
+#7  sycl::_V1::detail::ProgramManager::removeImages(sycl_device_binaries_struct*)
+#8  sycl.descriptor_unreg ()
+       from .../torch/lib/libtorch-xpu-ops-sycl-ForeachBinaryOpScalarKernels.so
+#9  _dl_call_fini () / #10 _dl_fini ()
+```
+
+`systrim` means glibc was returning heap to the OS and found its own
+bookkeeping inconsistent — consistent with a double free or a free of a
+pointer the allocator does not own. Full backtraces for both retained cores:
+`core_evidence_8924552/*.gdb.txt`.
+
 Consistency across the capture set:
 
 | Check | Result |
@@ -220,10 +243,20 @@ left open for Intel to confirm:
   223 kernel libraries and `libsycl` at `_dl_fini`.
 - **Mechanism.** A double-free, a free of a pointer owned elsewhere, and a call
   into an already-unmapped library are all consistent with what we see. We have
-  not instrumented the allocator to distinguish them.
-- **Why `ReduceNormKernel` specifically.** It is the library at frame #4 in all
-  48 captures, but that may simply reflect `_dl_fini` ordering rather than
-  anything special about that kernel.
+  not instrumented the allocator to distinguish them. The core-dump stack above
+  narrows it somewhat: the fault occurs in `systrim`, while glibc is returning
+  heap to the OS, which points at corrupted allocator bookkeeping rather than
+  at a call into unmapped code.
+- **~~Why `ReduceNormKernel` specifically.~~ Resolved 2026-10-15: it is not
+  specific.** It is the library at frame #4 in all 48 live-gdb captures of job
+  8929331, but a core dump from job 8924552
+  (`core.x4116c7s3b0n0.1762491`, retained) faults with frame #4 in
+  **`libtorch-xpu-ops-sycl-ForeachBinaryOpScalarKernels.so`** instead, with
+  frames #2-#3 unchanged in `libsycl.so.9`. The faulting library is therefore
+  whichever one `_dl_fini` happens to finalize into the already-freed image,
+  not a property of any one kernel. This supports the destructor-ordering
+  reading of the Ownership bullet above and argues against a defect localized
+  to a single kernel library.
 - **Why the fault repeats** instead of terminating the process. We have not
   determined what re-enters the faulting path.
 
@@ -266,8 +299,14 @@ Job stdout
   /lus/flare/projects/datascience/seonghapark/xpu_launcher/agpt_stall_gdb.o8929331
 
 Earlier evidence
-  Job 8924552 produced 47 core dumps (~386 GB) showing this same stack,
-  before any diagnostic tooling existed in the run.
+  Job 8924552 produced 47 core dumps (529.8 GB, 11.3 GB mean) showing this
+  same stack, before any diagnostic tooling existed in the run. Two of those
+  cores are retained at
+  /lus/flare/projects/datascience/seonghapark/core_evidence_8924552/
+  with a manifest and full extracted backtraces. All 47 were a single
+  4-second fault window on 2026-10-13 (hosts s3/s4/s5/s6, 11/12/12/12); the
+  other 45 were deleted on 2026-10-15 after the stacks were extracted, since
+  they carried no evidence the retained pair does not.
 ```
 
 **The diagnostic tooling did not cause this.** The identical stack was first
