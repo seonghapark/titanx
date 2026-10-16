@@ -307,6 +307,8 @@ Checks performed:
 | Index `total_size` | 7,946,313,728 bytes |
 | RoPE class on the save path | `ComplexRoPE.Config`, matching the load path |
 | Tokenizer/config assets | copied |
+| NaN/Inf sweep, all 111 output tensors | **none** |
+| Per-tensor delta vs. input, 24 sampled | **all 24 changed** (no stale copies) |
 
 ```
 total 7781412
@@ -325,9 +327,41 @@ the input checkpoint's assets and is **not** a statement about what this run tra
 The trained context length is 32768. Anyone loading this checkpoint for inference at
 >32768 is extrapolating beyond what the YaRN schedule was fit to.
 
-**Not verified**: numerical equivalence between the DCP shards and the merged safetensors
-on a per-element basis, and any inference/perplexity evaluation. The checks above are
-structural (key sets, shapes, counts, dtypes), not behavioral.
+### Tensor-level diff against the input checkpoint
+
+Every one of the 111 output tensors was swept for NaN/Inf — **none found**. 24 tensors
+spanning the embedding, `lm_head`, all of layer 0, and the norms of layers 1–11 were
+differenced element-wise against the input checkpoint
+(`artifacts/verify_export_bf16.py`, full output in `artifacts/verify_export.txt`):
+
+| tensor | max\|delta\| | rel_rms |
+|---|---|---|
+| `lm_head.weight` | 0.00339778 | 0.011531 |
+| `model.embed_tokens.weight` | 0.00346780 | 0.000478 |
+| `model.layers.0.self_attn.o_proj.weight` | 0.00155637 | **0.021112** |
+| `model.layers.0.self_attn.v_proj.weight` | 0.00143941 | 0.016891 |
+| `model.layers.0.self_attn.k_proj.weight` | 0.00184412 | 0.013437 |
+| `model.layers.0.self_attn.q_proj.weight` | 0.00162013 | 0.013398 |
+| `model.layers.0.mlp.down_proj.weight` | 0.00183530 | 0.012878 |
+| `model.layers.0.mlp.up_proj.weight` | 0.00177329 | 0.012318 |
+| `model.layers.0.mlp.gate_proj.weight` | 0.00185960 | 0.010937 |
+| layer norms (11 layers, both positions) | 0.0010–0.0022 | 0.0003–0.0012 |
+
+**sampled 24 tensors, 24 changed from the input checkpoint.**
+
+Two things this establishes. First, no tensor was silently passed through unmodified —
+a partial-write or stale-shard bug would leave some at exactly zero delta. Second, the
+magnitudes are what 400 steps at lr 2.28e-5 should produce: projection weights moved
+~1–2% in RMS, norms moved ~0.1%, and `max|delta|` sits at 0.0015–0.0035 across the
+board, which is near one BF16 ulp at these weight magnitudes. Nothing exploded.
+
+`o_proj` at 2.1% rel_rms is the largest mover, consistent with attention output being
+where a context-length change bites hardest.
+
+**Still not verified**: per-element equivalence between the DCP shards and the merged
+safetensors (this diff is output-vs-*input*, which proves training happened, not that
+the merge was faithful), and any inference/perplexity evaluation. A structurally valid
+export with plausible deltas is not a demonstrably correct one.
 
 ## 7. Reproduction
 

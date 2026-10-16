@@ -44,7 +44,8 @@ resource consumption, export verification, and how this run differs from the 163
 
 - `xpu-smi` reported no per-device rows, so there is **no XPU utilization/power telemetry**.
   The trainer's own `memory:` field (40.22 GiB, 62.86%) is the only device-side number.
-- No inference/perplexity eval on the exported model — tensor-level checks only.
+- No inference/perplexity eval on the exported model — tensor-level checks only
+  (111/111 keys, 0 NaN/Inf, 24/24 sampled tensors moved; see REPORT.md §6).
 - CP=1 here. 65536 and beyond need CP≥2; at 62.86% occupancy, 32768 is near the point
   where TP alone stops being enough.
 
@@ -58,4 +59,6 @@ artifacts/pbs_stdout_8936184.log.gz         PBS stdout, raw
 artifacts/export.log                        dcp_to_hf conversion
 artifacts/resource_metrics/                 15 s samples: 4 × {csv, jsonl, summary.json}
 artifacts/job_agpt_post.sh                  parameterized job script
+artifacts/verify_export_bf16.py             torch-free safetensors differ (BF16 by hand)
+artifacts/verify_export.txt                 its output: key sets, NaN sweep, deltas
 ```

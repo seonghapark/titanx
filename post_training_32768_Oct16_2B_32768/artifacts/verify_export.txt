@@ -1,0 +1,33 @@
+in keys: 111  out keys: 111
+only in IN : []
+only in OUT: []
+shape mismatches: [] (0)
+NaN/Inf tensors: none
+
+tensor                                                     dtype     max|delta|      rel_rms
+lm_head.weight                                             BF16      0.00339778     0.011531
+model.embed_tokens.weight                                  BF16       0.0034678  0.000478098
+model.layers.0.input_layernorm.weight                      BF16      0.00121379  0.000710487
+model.layers.0.mlp.down_proj.weight                        BF16       0.0018353    0.0128781
+model.layers.0.mlp.gate_proj.weight                        BF16       0.0018596    0.0109372
+model.layers.0.mlp.up_proj.weight                          BF16      0.00177329    0.0123177
+model.layers.0.post_attention_layernorm.weight             BF16      0.00184852    0.0005099
+model.layers.0.self_attn.k_proj.weight                     BF16      0.00184412    0.0134371
+model.layers.0.self_attn.o_proj.weight                     BF16      0.00155637    0.0211124
+model.layers.0.self_attn.q_proj.weight                     BF16      0.00162013    0.0133982
+model.layers.0.self_attn.v_proj.weight                     BF16      0.00143941     0.016891
+model.layers.1.input_layernorm.weight                      BF16      0.00186259   0.00121814
+model.layers.1.post_attention_layernorm.weight             BF16      0.00105995    0.0004262
+model.layers.10.input_layernorm.weight                     BF16      0.00167227  0.000836017
+model.layers.10.post_attention_layernorm.weight            BF16      0.00114852  0.000334344
+model.layers.11.input_layernorm.weight                     BF16      0.00166011  0.000740756
+model.layers.11.post_attention_layernorm.weight            BF16      0.00119138  0.000382815
+model.layers.2.input_layernorm.weight                      BF16      0.00176942   0.00105507
+model.layers.2.post_attention_layernorm.weight             BF16      0.00130624   0.00044557
+model.layers.3.input_layernorm.weight                      BF16      0.00160909  0.000837462
+model.layers.3.post_attention_layernorm.weight             BF16       0.0020715  0.000510214
+model.layers.4.input_layernorm.weight                      BF16      0.00199521  0.000873456
+model.layers.4.post_attention_layernorm.weight             BF16      0.00192738  0.000419244
+model.layers.5.input_layernorm.weight                      BF16      0.00217259  0.000943028
+
+sampled 24 tensors, 24 changed from the input checkpoint
