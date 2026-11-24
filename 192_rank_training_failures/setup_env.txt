@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Aurora / job 9124019. Use `source /path/to/setup_env.txt` in Bash before
+# enabling `set -u`. This prepares the environment; it does not launch a job.
+# Optional overrides: RS_PROJECT_ROOT, RS_PYTHON_VENV, RS_TRACE_DIR,
+# RS_TRACE_SOURCE, RS_MODEL_DIR, RS_PG19_DIR, LONGROPE_PROFILE.
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    printf 'Run this with: source "%s"\n' "$0" >&2
+    exit 2
+fi
+
+rs_setup_env() {
+    local base="${RS_PROJECT_ROOT:-/lus/flare/projects/datascience/seonghapark}"
+    local runtime="$base/LongRoPE/runtime"
+    local snapshot="$base/LongRoPE/diagnostics/rs_owner_9124019"
+    local seeded="$base/LongRoPE/experiments/pg19_longrope_seeded"
+    local venv="${RS_PYTHON_VENV:-$base/venv}"
+    local source_file="${RS_TRACE_SOURCE:-$snapshot/rs_event_trace.c}"
+    local scripts model data profile trace path
+    scripts="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || return 1
+    model="${RS_MODEL_DIR:-$seeded/models/20b_cumulative_32768/step-104}"
+    data="${RS_PG19_DIR:-$base/assets/hf/datasets/pg19/data}"
+    profile="${LONGROPE_PROFILE:-$seeded/profiles/20b_cumulative_65536.json}"
+
+    module load frameworks/2026.1.0 || return 1
+    for path in "$venv/bin/activate" "$source_file" "$runtime/run_train.sh" \
+        "$runtime/xpu_torchtitan/titan_train.py" "$profile" \
+        "$model/model.safetensors.index.json" "$scripts/rs_owner_launch.py" \
+        "$scripts/rs_owner_gdb.py" "$scripts/rs_event_train.py"; do
+        if [[ ! -r "$path" ]]; then
+            printf 'Required file is missing or unreadable: %s\n' "$path" >&2
+            return 1
+        fi
+    done
+    if [[ ! -d "$data" ]]; then
+        printf 'PG19 data directory not found: %s\n' "$data" >&2
+        return 1
+    fi
+    source "$venv/bin/activate" || return 1
+    export PYTHON_BIN="$venv/bin/python"
+    export RS_TRAIN_ENTRY="$runtime/xpu_torchtitan/titan_train.py"
+    export TORCHTITAN_ROOT="$runtime/xpu_torchtitan/torchtitan_repo"
+    export PYTHONPATH="$runtime:$runtime/inductor_iso:$TORCHTITAN_ROOT"
+    export LD_LIBRARY_PATH="/opt/aurora/26.181.0/frameworks/aurora_frameworks-2026.1.0/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+    "$PYTHON_BIN" - "$model" "$data" <<'PY' || return 1
+import json
+import sys
+from pathlib import Path
+
+import torch
+from torch.distributed.fsdp._fully_shard import _fsdp_collectives, _fsdp_param_group
+from torchtitan.components.loss import _LossParallelCrossEntropy
+
+model, data = map(Path, sys.argv[1:])
+index = json.loads((model / "model.safetensors.index.json").read_text())
+for name in sorted(set(index["weight_map"].values())):
+    with (model / name).open("rb") as shard:
+        if not shard.read(8):
+            raise SystemExit(f"Empty checkpoint shard: {shard.name}")
+if not any(data.glob("train-*.parquet")):
+    raise SystemExit(f"No PG19 train-*.parquet files in {data}")
+print(f"PyTorch {torch.__version__}; checkpoint shards readable")
+PY
+    /usr/bin/gdb -nx -batch -ex 'python import json; print("GDB Python ready")' || return 1
+    if [[ -n "${RS_TRACE_DIR:-}" ]]; then
+        # Refuse to reuse a trace directory: per-rank logs use exclusive creation.
+        mkdir -m 700 -- "$RS_TRACE_DIR" || return 1
+        trace="$(cd -- "$RS_TRACE_DIR" && pwd)" || return 1
+    else
+        trace="$(mktemp -d "$PWD/rs_trace.XXXXXXXX")" || return 1
+    fi
+    gcc -std=c11 -Wall -Wextra -Werror -O2 -shared -fPIC -Wl,-z,defs \
+        -DRS_OWNER_TRACE "$source_file" -lze_loader -o "$trace/rs_event_trace.so" || return 1
+
+    export RS_TRACE_DIR="$trace" RS_OWNER_TRACE=1 RS_TIMEOUT_SECONDS=3420
+    export RS_DIAG_DIR="$scripts" RS_MODEL_DIR="$model" RS_PG19_DIR="$data"
+    export RS_RUN_TRAIN="$runtime/run_train.sh" LONGROPE_PROFILE="$profile"
+    export TORCHINDUCTOR_CACHE_DIR="$trace/inductor"
+    export HF_HOME="$base/LongRoPE/experiments/post50/cache/models/cache"
+    export HF_DATASETS_CACHE="$base/LongRoPE/experiments/post50/cache/datasets"
+    export HF_HUB_DISABLE_XET=1 WANDB_MODE=offline PYTHONMULTIPROCESSINGMETHOD=spawn
+    export AGPT_INDUCTOR_ISOLATE=1 AGPT_OSEXIT_EXPERIMENT=1 AGPT_CORE_LIMIT_BYTES=0
+    export AGPT_CP_ROTATE_METHOD=alltoall AGPT_DATA_SEED=811700880 AGPT_LOSS_DIAG=1
+    export CCL_OP_SYNC=1 CCL_PROCESS_LAUNCHER=pmix ZE_FLAT_DEVICE_HIERARCHY=FLAT
+    export ZE_ENABLE_TRACING_LAYER=1
+    export NNODES=16 NPROC_PER_NODE=12 DEVICES_PER_NODE=12 AUTO_RETRY=0 SPARE_NODES=0
+    printf 'Aurora diagnostic environment ready. RS_TRACE_DIR=%s\n' "$RS_TRACE_DIR"
+}
+
+rs_setup_env || return 1
+unset -f rs_setup_env
+
+# After sourcing this file inside a 16-node PBS allocation, the original
+# one-step diagnostic command is:
+#   ulimit -c 0
+#   awk 'NF && !seen[$1]++ {print $1}' "$PBS_NODEFILE" > "$RS_TRACE_DIR/hosts.txt"
+#   timeout --signal=TERM --kill-after=60 "$RS_TIMEOUT_SECONDS" \
+#     bash "$RS_RUN_TRAIN" multi "$RS_TRACE_DIR/hosts.txt" -- \
+#     "$PYTHON_BIN" "$RS_DIAG_DIR/rs_owner_launch.py" \
+#     --module agpt --config agpt_20b_yarn --hf_assets_path "$RS_MODEL_DIR" \
+#     --dump_folder "$RS_TRACE_DIR/training" --dataloader.dataset PG19 \
+#     --dataloader.dataset_path "$RS_PG19_DIR" \
+#     --checkpoint.enable --checkpoint.load_only --checkpoint.interval 5 \
+#     --optimizer.param-groups.0.optimizer-name AdamW \
+#     --optimizer.param-groups.0.optimizer-kwargs.lr 2.28e-5 \
+#     --debug.seed 1234 --training.steps 1 --training.seq_len 65536 \
+#     --training.local_batch_size 1 --compile.no-enable \
+#     --parallelism.tensor_parallel_degree 4 --parallelism.pipeline_parallel_degree 1 \
+#     --parallelism.context_parallel_degree 4 --comm.init_timeout_seconds 1200 \
+#     > "$RS_TRACE_DIR/run.log" 2>&1
+#
+# MPI supplies the rank variables. Do not start rs_owner_gdb.py with normal
+# Python; rs_owner_launch.py loads it into GDB for the selected ranks.
